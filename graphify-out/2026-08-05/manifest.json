@@ -95,8 +95,8 @@
     "semantic_hash": ""
   },
   "backend/internal/api/handlers/auth.go": {
-    "mtime": 1785891748.3481739,
-    "ast_hash": "a18b0506823aeaffb80eea986ed0afb2",
+    "mtime": 1785909972.9845533,
+    "ast_hash": "b69fbf7b2d932c51214a8a64dcafeeb5",
     "semantic_hash": ""
   },
   "backend/internal/api/handlers/auth_test.go": {

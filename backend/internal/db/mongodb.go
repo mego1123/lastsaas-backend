@@ -91,6 +91,7 @@ func (m *MongoDB) ensureIndexes() {
                         []mongo.IndexModel{
                                 {Keys: bson.D{{Key: "userId", Value: 1}}},
                                 {Keys: bson.D{{Key: "tokenHash", Value: 1}}, Options: options.Index().SetUnique(true)},
+                                {Keys: bson.D{{Key: "familyId", Value: 1}}},
                                 {Keys: bson.D{{Key: "expiresAt", Value: 1}}, Options: options.Index().SetExpireAfterSeconds(0)},
                         },
                 },

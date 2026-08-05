@@ -95,8 +95,8 @@
     "semantic_hash": ""
   },
   "backend/internal/api/handlers/auth.go": {
-    "mtime": 1785909972.9845533,
-    "ast_hash": "b69fbf7b2d932c51214a8a64dcafeeb5",
+    "mtime": 1785915419.6384332,
+    "ast_hash": "20b594dedcad0765e1735d955e870a69",
     "semantic_hash": ""
   },
   "backend/internal/api/handlers/auth_test.go": {
@@ -345,8 +345,8 @@
     "semantic_hash": ""
   },
   "backend/internal/db/mongodb.go": {
-    "mtime": 1785879414.3755338,
-    "ast_hash": "ed3e3f669e771fdfe8aaf12d3514dc9c",
+    "mtime": 1785915404.7284296,
+    "ast_hash": "0747479a36fc6871f45c5a38b0a28fbe",
     "semantic_hash": ""
   },
   "backend/internal/db/schema.go": {
