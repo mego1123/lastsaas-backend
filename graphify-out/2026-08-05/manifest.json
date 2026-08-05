@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "backend/internal/auth/jwt.go": {
-    "mtime": 1785890128.1593142,
-    "ast_hash": "0236ea948b5811b9bc4482c9af6aa189",
+    "mtime": 1785900417.1904187,
+    "ast_hash": "4d28a39e61c1731e84d62eb72192f4eb",
     "semantic_hash": ""
   },
   "backend/internal/auth/jwt_test.go": {
