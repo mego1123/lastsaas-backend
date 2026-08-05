@@ -149,8 +149,16 @@ func (h *WebhookHandler) handleCheckoutCompleted(ctx context.Context, event stri
 		return fmt.Errorf("unmarshal checkout session: %w", err)
 	}
 
-	tenantID, _ := primitive.ObjectIDFromHex(session.Metadata["tenantId"])
-	userID, _ := primitive.ObjectIDFromHex(session.Metadata["userId"])
+	tenantID, err := primitive.ObjectIDFromHex(session.Metadata["tenantId"])
+	if err != nil {
+		slog.Error("Webhook: invalid tenantId in session metadata", "raw", session.Metadata["tenantId"], "error", err)
+		return fmt.Errorf("invalid tenantId in session metadata: %w", err)
+	}
+	userID, err := primitive.ObjectIDFromHex(session.Metadata["userId"])
+	if err != nil {
+		slog.Error("Webhook: invalid userId in session metadata", "raw", session.Metadata["userId"], "error", err)
+		return fmt.Errorf("invalid userId in session metadata: %w", err)
+	}
 	if tenantID.IsZero() || userID.IsZero() {
 		slog.Error("Webhook: missing tenantId or userId in session metadata")
 		return fmt.Errorf("missing tenantId or userId in session metadata")
@@ -188,7 +196,11 @@ func (h *WebhookHandler) handleCheckoutCompleted(ctx context.Context, event stri
 
 	if planIDStr != "" {
 		// Subscription checkout
-		planID, _ := primitive.ObjectIDFromHex(planIDStr)
+		planID, err := primitive.ObjectIDFromHex(planIDStr)
+		if err != nil {
+			slog.Error("Webhook: invalid planId in session metadata", "raw", planIDStr, "error", err)
+			return fmt.Errorf("invalid planId in session metadata: %w", err)
+		}
 		var plan models.Plan
 		if err := h.db.Plans().FindOne(ctx, bson.M{"_id": planID}).Decode(&plan); err != nil {
 			slog.Error("Webhook: plan not found", "planId", planIDStr)
@@ -301,7 +313,11 @@ func (h *WebhookHandler) handleCheckoutCompleted(ctx context.Context, event stri
 
 	} else if bundleIDStr != "" {
 		// One-time bundle purchase
-		bundleID, _ := primitive.ObjectIDFromHex(bundleIDStr)
+		bundleID, err := primitive.ObjectIDFromHex(bundleIDStr)
+		if err != nil {
+			slog.Error("Webhook: invalid bundleId in session metadata", "raw", bundleIDStr, "error", err)
+			return fmt.Errorf("invalid bundleId in session metadata: %w", err)
+		}
 		var bundle models.CreditBundle
 		if err := h.db.CreditBundles().FindOne(ctx, bson.M{"_id": bundleID}).Decode(&bundle); err != nil {
 			slog.Error("Webhook: bundle not found", "bundleId", bundleIDStr)
@@ -477,11 +493,15 @@ func (h *WebhookHandler) handleInvoicePaymentFailed(ctx context.Context, event s
 	}
 
 	// Send in-app message to all users in the tenant
-	cursor, _ := h.db.TenantMemberships().Find(ctx, bson.M{"tenantId": tenant.ID})
 	var memberships []models.TenantMembership
-	if cursor != nil {
-		cursor.All(ctx, &memberships)
-		cursor.Close(ctx)
+	cursor, cursorErr := h.db.TenantMemberships().Find(ctx, bson.M{"tenantId": tenant.ID})
+	if cursorErr != nil {
+		slog.Warn("Webhook: failed to find tenant memberships for failed-payment notification", "tenantId", tenant.ID.Hex(), "error", cursorErr)
+	} else {
+		defer func() { _ = cursor.Close(ctx) }()
+		if err := cursor.All(ctx, &memberships); err != nil {
+			slog.Warn("Webhook: failed to decode tenant memberships for failed-payment notification", "tenantId", tenant.ID.Hex(), "error", err)
+		}
 	}
 
 	subject := h.getConfig("billing.failed_charge.message_subject")
@@ -857,7 +877,9 @@ func extractInstanceFromEvent(event stripe.Event) (string, bool) {
 	var obj struct {
 		Metadata map[string]string `json:"metadata"`
 	}
-	if err := json.Unmarshal(event.Data.Raw, &obj); err == nil && obj.Metadata != nil {
+	if err := json.Unmarshal(event.Data.Raw, &obj); err != nil {
+		slog.Warn("Webhook: failed to unmarshal event data for instance extraction", "error", err)
+	} else if obj.Metadata != nil {
 		if inst, ok := obj.Metadata["instance"]; ok {
 			return inst, true
 		}

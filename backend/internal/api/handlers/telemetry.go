@@ -110,7 +110,7 @@ func (h *TelemetryHandler) TrackAuthenticated(w http.ResponseWriter, r *http.Req
 		respondWithError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
-	tenant, _ := middleware.GetTenantFromContext(r.Context())
+	tenant, hasTenant := middleware.GetTenantFromContext(r.Context())
 
 	var req struct {
 		Event      string                 `json:"event"`
@@ -144,7 +144,7 @@ func (h *TelemetryHandler) TrackAuthenticated(w http.ResponseWriter, r *http.Req
 		Properties: sanitizeProperties(req.Properties),
 		CreatedAt:  time.Now(),
 	}
-	if tenant != nil {
+	if hasTenant && tenant != nil {
 		event.TenantID = &tenant.ID
 	}
 
@@ -164,7 +164,7 @@ func (h *TelemetryHandler) TrackBatch(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
-	tenant, _ := middleware.GetTenantFromContext(r.Context())
+	tenant, hasTenant := middleware.GetTenantFromContext(r.Context())
 
 	var req struct {
 		Events []struct {
@@ -206,7 +206,7 @@ func (h *TelemetryHandler) TrackBatch(w http.ResponseWriter, r *http.Request) {
 			Properties: sanitizeProperties(e.Properties),
 			CreatedAt:  now,
 		}
-		if tenant != nil {
+		if hasTenant && tenant != nil {
 			event.TenantID = &tenant.ID
 		}
 		events = append(events, event)

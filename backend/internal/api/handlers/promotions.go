@@ -114,12 +114,14 @@ func (h *PromotionsHandler) buildProductNameMap(ctx context.Context) map[string]
 	// Get all stripe mappings.
 	cursor, err := h.db.StripeMappings().Find(ctx, bson.M{})
 	if err != nil {
+		slog.Warn("failed to find stripe mappings for product name map", "error", err)
 		return nameMap
 	}
 	defer cursor.Close(ctx)
 
 	var mappings []models.StripeMapping
 	if err := cursor.All(ctx, &mappings); err != nil {
+		slog.Warn("failed to decode stripe mappings for product name map", "error", err)
 		return nameMap
 	}
 
@@ -141,14 +143,16 @@ func (h *PromotionsHandler) buildProductNameMap(ctx context.Context) map[string]
 		for id := range planIDs {
 			ids = append(ids, id)
 		}
-		cur, _ := h.db.Plans().Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
-		if cur != nil {
+		cur, err := h.db.Plans().Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
+		if err != nil {
+			slog.Warn("failed to find plans for product name map", "error", err)
+		} else {
+			defer func() { _ = cur.Close(ctx) }()
 			var plans []models.Plan
 			cur.All(ctx, &plans)
 			for _, p := range plans {
 				planNames[p.ID] = p.Name
 			}
-			cur.Close(ctx)
 		}
 	}
 
@@ -159,14 +163,16 @@ func (h *PromotionsHandler) buildProductNameMap(ctx context.Context) map[string]
 		for id := range bundleIDs {
 			ids = append(ids, id)
 		}
-		cur, _ := h.db.CreditBundles().Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
-		if cur != nil {
+		cur, err := h.db.CreditBundles().Find(ctx, bson.M{"_id": bson.M{"$in": ids}})
+		if err != nil {
+			slog.Warn("failed to find bundles for product name map", "error", err)
+		} else {
+			defer func() { _ = cur.Close(ctx) }()
 			var bundles []models.CreditBundle
 			cur.All(ctx, &bundles)
 			for _, b := range bundles {
 				bundleNames[b.ID] = b.Name
 			}
-			cur.Close(ctx)
 		}
 	}
 

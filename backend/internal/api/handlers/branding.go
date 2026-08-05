@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -126,7 +127,10 @@ func (h *BrandingHandler) ServeAsset(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", asset.ContentType)
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	w.Write(asset.Data)
+	if _, err := w.Write(asset.Data); err != nil {
+		slog.Error("failed to write branding asset", "key", key, "error", err)
+		return
+	}
 }
 
 // ServeMedia serves a media library file by ID.
@@ -145,7 +149,10 @@ func (h *BrandingHandler) ServeMedia(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", asset.ContentType)
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	w.Write(asset.Data)
+	if _, err := w.Write(asset.Data); err != nil {
+		slog.Error("failed to write media asset", "id", key, "error", err)
+		return
+	}
 }
 
 // GetPublicPage returns a published custom page by slug.

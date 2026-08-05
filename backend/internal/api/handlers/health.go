@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -133,6 +134,7 @@ func (h *HealthHandler) SendTestEmail(w http.ResponseWriter, r *http.Request) {
 		</div>`, time.Now().UTC().Format(time.RFC3339))
 
 	if err := h.emailService.SendEmail(req.To, subject, body); err != nil {
+		slog.Error("failed to send test email", "to", req.To, "error", err)
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{
 			"success": false,
 			"error":   err.Error(),

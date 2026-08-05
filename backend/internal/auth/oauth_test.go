@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -106,7 +107,7 @@ func TestGoogleExchangeCodeFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for bad code")
 	}
-	if err != ErrOAuthCodeExchange {
+	if !errors.Is(err, ErrOAuthCodeExchange) {
 		t.Errorf("expected ErrOAuthCodeExchange, got %v", err)
 	}
 }
@@ -220,7 +221,7 @@ func TestGitHubExchangeCodeFailure(t *testing.T) {
 	}
 
 	_, err := svc.ExchangeCode(context.Background(), "bad-code")
-	if err != ErrOAuthCodeExchange {
+	if !errors.Is(err, ErrOAuthCodeExchange) {
 		t.Errorf("expected ErrOAuthCodeExchange, got %v", err)
 	}
 }
@@ -292,7 +293,7 @@ func TestMicrosoftExchangeCodeFailure(t *testing.T) {
 	}
 
 	_, err := svc.ExchangeCode(context.Background(), "bad-code")
-	if err != ErrOAuthCodeExchange {
+	if !errors.Is(err, ErrOAuthCodeExchange) {
 		t.Errorf("expected ErrOAuthCodeExchange, got %v", err)
 	}
 }
@@ -374,7 +375,7 @@ func TestGoogleGetUserInfoError(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Transport: transport})
 	_, err := svc.GetUserInfo(ctx, mockToken())
-	if err != ErrOAuthUserInfo {
+	if !errors.Is(err, ErrOAuthUserInfo) {
 		t.Errorf("expected ErrOAuthUserInfo, got %v", err)
 	}
 }
@@ -498,7 +499,7 @@ func TestGitHubGetUserInfoInvalidJSON(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Transport: transport})
 	_, err := svc.GetUserInfo(ctx, mockToken())
-	if err != ErrOAuthUserInfo {
+	if !errors.Is(err, ErrOAuthUserInfo) {
 		t.Errorf("expected ErrOAuthUserInfo, got %v", err)
 	}
 }
@@ -547,7 +548,7 @@ func TestMicrosoftGetUserInfoInvalidJSON(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Transport: transport})
 	_, err := svc.GetUserInfo(ctx, mockToken())
-	if err != ErrOAuthUserInfo {
+	if !errors.Is(err, ErrOAuthUserInfo) {
 		t.Errorf("expected ErrOAuthUserInfo, got %v", err)
 	}
 }

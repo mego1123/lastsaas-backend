@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -163,7 +164,9 @@ func DocsOpenAPI(w http.ResponseWriter, r *http.Request) {
 			// Request body
 			if ep.Body != "" {
 				var bodyExample any
-				json.Unmarshal([]byte(ep.Body), &bodyExample)
+				if err := json.Unmarshal([]byte(ep.Body), &bodyExample); err != nil {
+					slog.Warn("OpenAPI: failed to parse body example", "path", path, "method", method, "error", err)
+				}
 				op.RequestBody = &openAPIRequestBody{
 					Required: true,
 					Content: map[string]openAPIMediaType{
@@ -177,7 +180,9 @@ func DocsOpenAPI(w http.ResponseWriter, r *http.Request) {
 			// Response
 			if ep.Response != "" {
 				var respExample any
-				json.Unmarshal([]byte(ep.Response), &respExample)
+				if err := json.Unmarshal([]byte(ep.Response), &respExample); err != nil {
+					slog.Warn("OpenAPI: failed to parse response example", "path", path, "method", method, "error", err)
+				}
 				op.Responses["200"] = openAPIResponse{
 					Description: "Success",
 					Content: map[string]openAPIMediaType{
@@ -208,7 +213,10 @@ func DocsOpenAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	enc.Encode(spec)
+	if err := enc.Encode(spec); err != nil {
+		slog.Error("failed to encode OpenAPI spec response", "error", err)
+		return
+	}
 }
 
 func mapParamType(t string) string {

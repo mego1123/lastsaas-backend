@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -80,7 +81,7 @@ func TestExpiredAccessToken(t *testing.T) {
 	token, _ := svc.GenerateAccessToken("user123", "user@test.com", "Test User")
 
 	_, err := svc.ValidateAccessToken(token)
-	if err != ErrExpiredToken {
+	if !errors.Is(err, ErrExpiredToken) {
 		t.Errorf("expected ErrExpiredToken, got %v", err)
 	}
 }
@@ -95,7 +96,7 @@ func TestExpiredRefreshToken(t *testing.T) {
 	token, _ := svc.GenerateRefreshToken("user123")
 
 	_, err := svc.ValidateRefreshToken(token)
-	if err != ErrExpiredToken {
+	if !errors.Is(err, ErrExpiredToken) {
 		t.Errorf("expected ErrExpiredToken, got %v", err)
 	}
 }
@@ -107,7 +108,7 @@ func TestInvalidAccessTokenSignature(t *testing.T) {
 	// Create another service with a different secret
 	otherSvc := NewJWTService("different-secret-minimum16char", testRefreshSecret, 15, 7)
 	_, err := otherSvc.ValidateAccessToken(token)
-	if err != ErrInvalidToken {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("expected ErrInvalidToken, got %v", err)
 	}
 }
@@ -118,7 +119,7 @@ func TestInvalidRefreshTokenSignature(t *testing.T) {
 
 	otherSvc := NewJWTService(testAccessSecret, "different-refresh-secret-min16", 15, 7)
 	_, err := otherSvc.ValidateRefreshToken(token)
-	if err != ErrInvalidToken {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("expected ErrInvalidToken, got %v", err)
 	}
 }
@@ -127,7 +128,7 @@ func TestMalformedToken(t *testing.T) {
 	svc := newTestJWTService()
 
 	_, err := svc.ValidateAccessToken("not-a-valid-jwt")
-	if err != ErrInvalidToken {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("expected ErrInvalidToken, got %v", err)
 	}
 }
@@ -136,7 +137,7 @@ func TestEmptyToken(t *testing.T) {
 	svc := newTestJWTService()
 
 	_, err := svc.ValidateAccessToken("")
-	if err != ErrInvalidToken {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("expected ErrInvalidToken, got %v", err)
 	}
 }

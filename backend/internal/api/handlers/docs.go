@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"html"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -1099,7 +1100,10 @@ function toggleDetail(id){
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	w.Write([]byte(sb.String()))
+	if _, err := w.Write([]byte(sb.String())); err != nil {
+		slog.Error("failed to write HTML docs response", "error", err)
+		return
+	}
 }
 
 // --- Markdown documentation ---
@@ -1174,7 +1178,10 @@ func DocsMarkdown(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	w.Write([]byte(sb.String()))
+	if _, err := w.Write([]byte(sb.String())); err != nil {
+		slog.Error("failed to write markdown docs response", "error", err)
+		return
+	}
 }
 
 // stripHTML removes simple HTML tags for the markdown output.

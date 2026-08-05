@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/csv"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -90,12 +91,12 @@ func (h *LogHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	// Pagination
-	page, _ := strconv.Atoi(q.Get("page"))
-	if page < 1 {
+	page, pageErr := strconv.Atoi(q.Get("page"))
+	if pageErr != nil || page < 1 {
 		page = 1
 	}
-	perPage, _ := strconv.Atoi(q.Get("perPage"))
-	if perPage < 1 || perPage > 100 {
+	perPage, perPageErr := strconv.Atoi(q.Get("perPage"))
+	if perPageErr != nil || perPage < 1 || perPage > 100 {
 		perPage = 50
 	}
 	skip := int64((page - 1) * perPage)
@@ -203,11 +204,15 @@ func (h *LogHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=system_logs.csv")
 
 	writer := csv.NewWriter(w)
-	writer.Write([]string{"Timestamp", "Severity", "Category", "Message", "UserID", "TenantID", "Action"})
+	if err := writer.Write([]string{"Timestamp", "Severity", "Category", "Message", "UserID", "TenantID", "Action"}); err != nil {
+		slog.Error("failed to write CSV header", "error", err)
+		return
+	}
 
 	for cursor.Next(ctx) {
 		var log models.SystemLog
 		if err := cursor.Decode(&log); err != nil {
+			slog.Warn("failed to decode log row during CSV export", "error", err)
 			continue
 		}
 		userID := ""
@@ -229,6 +234,9 @@ func (h *LogHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writer.Flush()
+	if err := writer.Error(); err != nil {
+		slog.Error("CSV writer error during log export", "error", err)
+	}
 }
 
 func getFirst(q map[string][]string, key string) string {

@@ -1,166 +1,168 @@
 package email
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"html/template"
-	"io"
-	"log/slog"
-	"math"
-	"net/http"
-	"time"
+        "bytes"
+        "encoding/json"
+        "fmt"
+        "html/template"
+        "io"
+        "log/slog"
+        "math"
+        "net/http"
+        "time"
 
-	"lastsaas/internal/apicounter"
+        "lastsaas/internal/apicounter"
 )
 
 type ResendService struct {
-	apiKey      string
-	fromEmail   string
-	fromName    string
-	appName     string
-	baseURL     string
-	frontendURL string
-	getConfig   func(string) string
-	httpClient  *http.Client
+        apiKey      string
+        fromEmail   string
+        fromName    string
+        appName     string
+        baseURL     string
+        frontendURL string
+        getConfig   func(string) string
+        httpClient  *http.Client
 }
 
 type emailRequest struct {
-	From    string   `json:"from"`
-	To      []string `json:"to"`
-	Subject string   `json:"subject"`
-	HTML    string   `json:"html"`
+        From    string   `json:"from"`
+        To      []string `json:"to"`
+        Subject string   `json:"subject"`
+        HTML    string   `json:"html"`
 }
 
 func NewResendService(apiKey, fromEmail, fromName, appName, frontendURL string, getConfig func(string) string) *ResendService {
-	return &ResendService{
-		apiKey:      apiKey,
-		fromEmail:   fromEmail,
-		fromName:    fromName,
-		appName:     appName,
-		baseURL:     "https://api.resend.com",
-		frontendURL: frontendURL,
-		getConfig:   getConfig,
-		httpClient:  &http.Client{Timeout: 30 * time.Second},
-	}
+        return &ResendService{
+                apiKey:      apiKey,
+                fromEmail:   fromEmail,
+                fromName:    fromName,
+                appName:     appName,
+                baseURL:     "https://api.resend.com",
+                frontendURL: frontendURL,
+                getConfig:   getConfig,
+                httpClient:  &http.Client{Timeout: 30 * time.Second},
+        }
 }
 
 func (s *ResendService) from() string {
-	if s.fromName == "" {
-		return s.fromEmail
-	}
-	return fmt.Sprintf("%s <%s>", s.fromName, s.fromEmail)
+        if s.fromName == "" {
+                return s.fromEmail
+        }
+        return fmt.Sprintf("%s <%s>", s.fromName, s.fromEmail)
 }
 
 func (s *ResendService) SendEmail(to, subject, html string) error {
-	reqBody := emailRequest{
-		From:    s.from(),
-		To:      []string{to},
-		Subject: subject,
-		HTML:    html,
-	}
+        reqBody := emailRequest{
+                From:    s.from(),
+                To:      []string{to},
+                Subject: subject,
+                HTML:    html,
+        }
 
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("failed to marshal email request: %w", err)
-	}
+        jsonBody, err := json.Marshal(reqBody)
+        if err != nil {
+                return fmt.Errorf("failed to marshal email request: %w", err)
+        }
 
-	const maxRetries = 3
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		if attempt > 0 {
-			backoff := time.Duration(math.Pow(2, float64(attempt))) * 500 * time.Millisecond
-			time.Sleep(backoff)
-			slog.Warn("email retry attempt", "attempt", attempt+1, "maxRetries", maxRetries, "to", to)
-		}
+        const maxRetries = 3
+        for attempt := 0; attempt < maxRetries; attempt++ {
+                if attempt > 0 {
+                        backoff := time.Duration(math.Pow(2, float64(attempt))) * 500 * time.Millisecond
+                        time.Sleep(backoff)
+                        slog.Warn("email retry attempt", "attempt", attempt+1, "maxRetries", maxRetries, "to", to)
+                }
 
-		req, err := http.NewRequest("POST", s.baseURL+"/emails", bytes.NewBuffer(jsonBody))
-		if err != nil {
-			return fmt.Errorf("failed to create request: %w", err)
-		}
+                req, err := http.NewRequest("POST", s.baseURL+"/emails", bytes.NewBuffer(jsonBody))
+                if err != nil {
+                        return fmt.Errorf("failed to create request: %w", err)
+                }
 
-		req.Header.Set("Authorization", "Bearer "+s.apiKey)
-		req.Header.Set("Content-Type", "application/json")
+                req.Header.Set("Authorization", "Bearer "+s.apiKey)
+                req.Header.Set("Content-Type", "application/json")
 
-		resp, err := s.httpClient.Do(req)
-		if err != nil {
-			if attempt < maxRetries-1 {
-				slog.Warn("email network error, will retry", "error", err)
-				continue
-			}
-			return fmt.Errorf("failed to send email after %d attempts: %w", maxRetries, err)
-		}
+                resp, err := s.httpClient.Do(req)
+                if err != nil {
+                        if attempt < maxRetries-1 {
+                                slog.Warn("email network error, will retry", "error", err)
+                                continue
+                        }
+                        return fmt.Errorf("failed to send email after %d attempts: %w", maxRetries, err)
+                }
+                defer func() { _ = resp.Body.Close() }()
 
-		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-			resp.Body.Close()
-			apicounter.ResendEmails.Add(1)
-			slog.Info("email sent successfully", "to", to)
-			return nil
-		}
+                if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+                        apicounter.ResendEmails.Add(1)
+                        slog.Info("email sent successfully", "to", to)
+                        return nil
+                }
 
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+                body, err := io.ReadAll(resp.Body)
+                if err != nil {
+                        slog.Warn("email: failed to read error response body", "status", resp.StatusCode, "error", err)
+                }
 
-		// Retry on transient errors (429 rate limit, 5xx server errors)
-		if (resp.StatusCode == 429 || resp.StatusCode >= 500) && attempt < maxRetries-1 {
-			slog.Warn("email API transient error, will retry", "status", resp.StatusCode, "body", string(body))
-			continue
-		}
+                // Retry on transient errors (429 rate limit, 5xx server errors)
+                if (resp.StatusCode == 429 || resp.StatusCode >= 500) && attempt < maxRetries-1 {
+                        slog.Warn("email API transient error, will retry", "status", resp.StatusCode, "body", string(body))
+                        continue
+                }
 
-		slog.Error("email API error", "status", resp.StatusCode, "body", string(body))
-		return fmt.Errorf("email API returned status %d", resp.StatusCode)
-	}
-	return fmt.Errorf("email send failed after %d attempts", maxRetries)
+                slog.Error("email API error", "status", resp.StatusCode, "body", string(body))
+                return fmt.Errorf("email API returned status %d", resp.StatusCode)
+        }
+        return fmt.Errorf("email send failed after %d attempts", maxRetries)
 }
 
 // resolveAppName returns the app name from the config system, falling back to the constructor value.
 func (s *ResendService) resolveAppName() string {
-	if s.getConfig != nil {
-		if name := s.getConfig("app.name"); name != "" {
-			return name
-		}
-	}
-	return s.appName
+        if s.getConfig != nil {
+                if name := s.getConfig("app.name"); name != "" {
+                        return name
+                }
+        }
+        return s.appName
 }
 
 // executeTemplate loads a template from config, parses it, and executes with the given data.
 // If the config value is empty or parsing/execution fails, the fallback string is returned.
 func (s *ResendService) executeTemplate(configKey string, data map[string]string, fallback string) string {
-	tmplStr := ""
-	if s.getConfig != nil {
-		tmplStr = s.getConfig(configKey)
-	}
-	if tmplStr == "" {
-		tmplStr = fallback
-	}
+        tmplStr := ""
+        if s.getConfig != nil {
+                tmplStr = s.getConfig(configKey)
+        }
+        if tmplStr == "" {
+                tmplStr = fallback
+        }
 
-	t, err := template.New(configKey).Parse(tmplStr)
-	if err != nil {
-		slog.Error("email: failed to parse template, using fallback", "template", configKey, "error", err)
-		return fallback
-	}
+        t, err := template.New(configKey).Parse(tmplStr)
+        if err != nil {
+                slog.Error("email: failed to parse template, using fallback", "template", configKey, "error", err)
+                return fallback
+        }
 
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
-		slog.Error("email: failed to execute template, using fallback", "template", configKey, "error", err)
-		return fallback
-	}
-	return buf.String()
+        var buf bytes.Buffer
+        if err := t.Execute(&buf, data); err != nil {
+                slog.Error("email: failed to execute template, using fallback", "template", configKey, "error", err)
+                return fallback
+        }
+        return buf.String()
 }
 
 func (s *ResendService) SendVerificationEmail(to, displayName, token string) error {
-	verifyURL := fmt.Sprintf("%s/verify-email?token=%s", s.frontendURL, token)
-	appName := s.resolveAppName()
+        verifyURL := fmt.Sprintf("%s/verify-email?token=%s", s.frontendURL, token)
+        appName := s.resolveAppName()
 
-	data := map[string]string{
-		"AppName":     appName,
-		"DisplayName": displayName,
-		"VerifyURL":   verifyURL,
-	}
+        data := map[string]string{
+                "AppName":     appName,
+                "DisplayName": displayName,
+                "VerifyURL":   verifyURL,
+        }
 
-	subject := s.executeTemplate("email.verification.subject", data,
-		fmt.Sprintf("Verify your %s account", appName))
+        subject := s.executeTemplate("email.verification.subject", data,
+                fmt.Sprintf("Verify your %s account", appName))
 
-	fallbackBody := `<!DOCTYPE html>
+        fallbackBody := `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 40px 20px;">
@@ -179,25 +181,25 @@ func (s *ResendService) SendVerificationEmail(to, displayName, token string) err
 </body>
 </html>`
 
-	html := s.executeTemplate("email.verification.body", data, fallbackBody)
+        html := s.executeTemplate("email.verification.body", data, fallbackBody)
 
-	return s.SendEmail(to, subject, html)
+        return s.SendEmail(to, subject, html)
 }
 
 func (s *ResendService) SendPasswordResetEmail(to, displayName, token string) error {
-	resetURL := fmt.Sprintf("%s/reset-password?token=%s", s.frontendURL, token)
-	appName := s.resolveAppName()
+        resetURL := fmt.Sprintf("%s/reset-password?token=%s", s.frontendURL, token)
+        appName := s.resolveAppName()
 
-	data := map[string]string{
-		"AppName":     appName,
-		"DisplayName": displayName,
-		"ResetURL":    resetURL,
-	}
+        data := map[string]string{
+                "AppName":     appName,
+                "DisplayName": displayName,
+                "ResetURL":    resetURL,
+        }
 
-	subject := s.executeTemplate("email.password_reset.subject", data,
-		fmt.Sprintf("Reset your %s password", appName))
+        subject := s.executeTemplate("email.password_reset.subject", data,
+                fmt.Sprintf("Reset your %s password", appName))
 
-	fallbackBody := `<!DOCTYPE html>
+        fallbackBody := `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 40px 20px;">
@@ -216,25 +218,25 @@ func (s *ResendService) SendPasswordResetEmail(to, displayName, token string) er
 </body>
 </html>`
 
-	html := s.executeTemplate("email.password_reset.body", data, fallbackBody)
+        html := s.executeTemplate("email.password_reset.body", data, fallbackBody)
 
-	return s.SendEmail(to, subject, html)
+        return s.SendEmail(to, subject, html)
 }
 
 func (s *ResendService) SendMagicLinkEmail(to, displayName, token string) error {
-	magicLinkURL := fmt.Sprintf("%s/auth/magic-link?token=%s", s.frontendURL, token)
-	appName := s.resolveAppName()
+        magicLinkURL := fmt.Sprintf("%s/auth/magic-link?token=%s", s.frontendURL, token)
+        appName := s.resolveAppName()
 
-	data := map[string]string{
-		"AppName":      appName,
-		"DisplayName":  displayName,
-		"MagicLinkURL": magicLinkURL,
-	}
+        data := map[string]string{
+                "AppName":      appName,
+                "DisplayName":  displayName,
+                "MagicLinkURL": magicLinkURL,
+        }
 
-	subject := s.executeTemplate("email.magic_link.subject", data,
-		fmt.Sprintf("Sign in to %s", appName))
+        subject := s.executeTemplate("email.magic_link.subject", data,
+                fmt.Sprintf("Sign in to %s", appName))
 
-	fallbackBody := `<!DOCTYPE html>
+        fallbackBody := `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 40px 20px;">
@@ -253,26 +255,26 @@ func (s *ResendService) SendMagicLinkEmail(to, displayName, token string) error 
 </body>
 </html>`
 
-	html := s.executeTemplate("email.magic_link.body", data, fallbackBody)
+        html := s.executeTemplate("email.magic_link.body", data, fallbackBody)
 
-	return s.SendEmail(to, subject, html)
+        return s.SendEmail(to, subject, html)
 }
 
 func (s *ResendService) SendInvitationEmail(to, inviterName, tenantName, token string) error {
-	inviteURL := fmt.Sprintf("%s/signup?invitation=%s", s.frontendURL, token)
-	appName := s.resolveAppName()
+        inviteURL := fmt.Sprintf("%s/signup?invitation=%s", s.frontendURL, token)
+        appName := s.resolveAppName()
 
-	data := map[string]string{
-		"AppName":     appName,
-		"InviterName": inviterName,
-		"TenantName":  tenantName,
-		"InviteURL":   inviteURL,
-	}
+        data := map[string]string{
+                "AppName":     appName,
+                "InviterName": inviterName,
+                "TenantName":  tenantName,
+                "InviteURL":   inviteURL,
+        }
 
-	subject := s.executeTemplate("email.invitation.subject", data,
-		fmt.Sprintf("You've been invited to %s", tenantName))
+        subject := s.executeTemplate("email.invitation.subject", data,
+                fmt.Sprintf("You've been invited to %s", tenantName))
 
-	fallbackBody := `<!DOCTYPE html>
+        fallbackBody := `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 40px 20px;">
@@ -289,7 +291,7 @@ func (s *ResendService) SendInvitationEmail(to, inviterName, tenantName, token s
 </body>
 </html>`
 
-	html := s.executeTemplate("email.invitation.body", data, fallbackBody)
+        html := s.executeTemplate("email.invitation.body", data, fallbackBody)
 
-	return s.SendEmail(to, subject, html)
+        return s.SendEmail(to, subject, html)
 }

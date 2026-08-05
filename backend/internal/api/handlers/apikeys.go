@@ -57,7 +57,11 @@ func (h *APIKeysHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	if keys == nil {
 		keys = []models.APIKey{}
 	}
-	total, _ := h.db.APIKeys().CountDocuments(r.Context(), bson.M{"isActive": true})
+	total, err := h.db.APIKeys().CountDocuments(r.Context(), bson.M{"isActive": true})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to count API keys")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{"apiKeys": keys, "total": total})
 }
 

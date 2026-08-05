@@ -72,7 +72,11 @@ func (h *BundlesHandler) ListBundles(w http.ResponseWriter, r *http.Request) {
 	if bundles == nil {
 		bundles = []models.CreditBundle{}
 	}
-	total, _ := h.db.CreditBundles().CountDocuments(r.Context(), bson.M{})
+	total, err := h.db.CreditBundles().CountDocuments(r.Context(), bson.M{})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to count credit bundles")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{"bundles": bundles, "total": total})
 }
 
@@ -89,7 +93,11 @@ func (h *BundlesHandler) CreateBundle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check name uniqueness
-	count, _ := h.db.CreditBundles().CountDocuments(r.Context(), bson.M{"name": req.Name})
+	count, err := h.db.CreditBundles().CountDocuments(r.Context(), bson.M{"name": req.Name})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to check credit bundle name uniqueness")
+		return
+	}
 	if count > 0 {
 		respondWithError(w, http.StatusConflict, "A credit bundle with this name already exists")
 		return
@@ -155,7 +163,11 @@ func (h *BundlesHandler) UpdateBundle(w http.ResponseWriter, r *http.Request) {
 
 	// Check name uniqueness if changed
 	if req.Name != existing.Name {
-		count, _ := h.db.CreditBundles().CountDocuments(r.Context(), bson.M{"name": req.Name, "_id": bson.M{"$ne": bundleID}})
+		count, err := h.db.CreditBundles().CountDocuments(r.Context(), bson.M{"name": req.Name, "_id": bson.M{"$ne": bundleID}})
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to check credit bundle name uniqueness")
+			return
+		}
 		if count > 0 {
 			respondWithError(w, http.StatusConflict, "A credit bundle with this name already exists")
 			return
@@ -181,7 +193,10 @@ func (h *BundlesHandler) UpdateBundle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var updated models.CreditBundle
-	h.db.CreditBundles().FindOne(r.Context(), bson.M{"_id": bundleID}).Decode(&updated)
+	if err := h.db.CreditBundles().FindOne(r.Context(), bson.M{"_id": bundleID}).Decode(&updated); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to reload updated credit bundle")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, updated)
 }
 

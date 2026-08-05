@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -67,10 +68,14 @@ func (h *WebhooksHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 	result := make([]webhookWithStats, len(hooks))
 	for i, hook := range hooks {
 		result[i].Webhook = hook
-		count, _ := h.db.WebhookDeliveries().CountDocuments(ctx, bson.M{
+		count, err := h.db.WebhookDeliveries().CountDocuments(ctx, bson.M{
 			"webhookId": hook.ID,
 			"createdAt": bson.M{"$gte": since},
 		})
+		if err != nil {
+			slog.Warn("failed to count webhook deliveries", "webhookId", hook.ID, "error", err)
+			count = 0
+		}
 		result[i].Deliveries24h = int(count)
 
 		var lastDel models.WebhookDelivery
@@ -80,7 +85,11 @@ func (h *WebhooksHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	total, _ := h.db.Webhooks().CountDocuments(ctx, bson.M{"isActive": true})
+	total, err := h.db.Webhooks().CountDocuments(ctx, bson.M{"isActive": true})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to count webhooks")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{"webhooks": result, "total": total})
 }
 
@@ -104,6 +113,7 @@ func (h *WebhooksHandler) GetWebhook(w http.ResponseWriter, r *http.Request) {
 		options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}).SetLimit(20),
 	)
 	if err != nil {
+		slog.Error("failed to query webhook deliveries", "webhookId", whID, "error", err)
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{
 			"webhook":    hook,
 			"deliveries": []models.WebhookDelivery{},
@@ -114,6 +124,7 @@ func (h *WebhooksHandler) GetWebhook(w http.ResponseWriter, r *http.Request) {
 
 	var deliveries []models.WebhookDelivery
 	if err := cursor.All(r.Context(), &deliveries); err != nil {
+		slog.Warn("failed to decode webhook deliveries", "webhookId", whID, "error", err)
 		deliveries = []models.WebhookDelivery{}
 	}
 	if deliveries == nil {
@@ -136,7 +147,7 @@ type webhookRequest struct {
 func validateWebhookURL(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("invalid URL format")
+		return fmt.Errorf("invalid URL format: %w", err)
 	}
 
 	host := u.Hostname()
@@ -155,7 +166,7 @@ func validateWebhookURL(rawURL string) error {
 		// If DNS fails, check if host is already an IP
 		ip := net.ParseIP(host)
 		if ip == nil {
-			return fmt.Errorf("cannot resolve hostname")
+			return fmt.Errorf("cannot resolve hostname: %w", err)
 		}
 		ips = []string{host}
 	}

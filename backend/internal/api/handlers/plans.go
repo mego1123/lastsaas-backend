@@ -90,7 +90,11 @@ func (h *PlansHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 		result[i].SubscriberCount = subCounts[p.ID]
 	}
 
-	total, _ := h.db.Plans().CountDocuments(ctx, bson.M{})
+	total, err := h.db.Plans().CountDocuments(ctx, bson.M{})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to count plans")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{"plans": result, "total": total})
 }
 
@@ -137,6 +141,7 @@ func (h *PlansHandler) ListEntitlementKeys(w http.ResponseWriter, r *http.Reques
 	for cursor.Next(r.Context()) {
 		var plan models.Plan
 		if err := cursor.Decode(&plan); err != nil {
+			slog.Warn("failed to decode plan during entitlement key scan", "error", err)
 			continue
 		}
 		for k, v := range plan.Entitlements {
@@ -245,7 +250,11 @@ func (h *PlansHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check name uniqueness
-	count, _ := h.db.Plans().CountDocuments(r.Context(), bson.M{"name": req.Name})
+	count, err := h.db.Plans().CountDocuments(r.Context(), bson.M{"name": req.Name})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to check plan name uniqueness")
+		return
+	}
 	if count > 0 {
 		respondWithError(w, http.StatusConflict, "A plan with this name already exists")
 		return
@@ -338,7 +347,11 @@ func (h *PlansHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 
 	// Check name uniqueness if name changed
 	if req.Name != existing.Name {
-		count, _ := h.db.Plans().CountDocuments(r.Context(), bson.M{"name": req.Name, "_id": bson.M{"$ne": planID}})
+		count, err := h.db.Plans().CountDocuments(r.Context(), bson.M{"name": req.Name, "_id": bson.M{"$ne": planID}})
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to check plan name uniqueness")
+			return
+		}
 		if count > 0 {
 			respondWithError(w, http.StatusConflict, "A plan with this name already exists")
 			return
@@ -388,8 +401,15 @@ func (h *PlansHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 
 	// Return updated plan with subscriber count
 	var updated models.Plan
-	h.db.Plans().FindOne(r.Context(), bson.M{"_id": planID}).Decode(&updated)
-	subCount, _ := h.db.Tenants().CountDocuments(r.Context(), bson.M{"planId": planID})
+	if err := h.db.Plans().FindOne(r.Context(), bson.M{"_id": planID}).Decode(&updated); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to reload updated plan")
+		return
+	}
+	subCount, err := h.db.Tenants().CountDocuments(r.Context(), bson.M{"planId": planID})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to count plan subscribers")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"id":                   updated.ID,
 		"name":                 updated.Name,
@@ -437,7 +457,11 @@ func (h *PlansHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantCount, _ := h.db.Tenants().CountDocuments(r.Context(), bson.M{"planId": planID})
+	tenantCount, err := h.db.Tenants().CountDocuments(r.Context(), bson.M{"planId": planID})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to count tenants using plan")
+		return
+	}
 	if tenantCount > 0 {
 		respondWithError(w, http.StatusConflict, fmt.Sprintf("Cannot delete plan: %d tenant(s) are using it", tenantCount))
 		return
@@ -478,7 +502,10 @@ func (h *PlansHandler) ArchivePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.db.Plans().UpdateByID(r.Context(), planID, bson.M{"$set": bson.M{"isArchived": true, "updatedAt": time.Now()}})
+	if _, err := h.db.Plans().UpdateByID(r.Context(), planID, bson.M{"$set": bson.M{"isArchived": true, "updatedAt": time.Now()}}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to archive plan")
+		return
+	}
 
 	if user, ok := middleware.GetUserFromContext(r.Context()); ok {
 		h.syslog.LogWithUser(r.Context(), models.LogMedium, fmt.Sprintf("Plan archived: %s", plan.Name), user.ID)
@@ -510,7 +537,10 @@ func (h *PlansHandler) UnarchivePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.db.Plans().UpdateByID(r.Context(), planID, bson.M{"$set": bson.M{"isArchived": false, "updatedAt": time.Now()}})
+	if _, err := h.db.Plans().UpdateByID(r.Context(), planID, bson.M{"$set": bson.M{"isArchived": false, "updatedAt": time.Now()}}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to unarchive plan")
+		return
+	}
 
 	if user, ok := middleware.GetUserFromContext(r.Context()); ok {
 		h.syslog.LogWithUser(r.Context(), models.LogMedium, fmt.Sprintf("Plan unarchived: %s", plan.Name), user.ID)
@@ -681,10 +711,14 @@ func (h *PlansHandler) ListPlansPublic(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
-	memberCount, _ := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{
+	memberCount, err := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{
 		"userId":   user.ID,
 		"tenantId": tenantID,
 	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to verify tenant membership")
+		return
+	}
 	if memberCount == 0 {
 		respondWithError(w, http.StatusForbidden, "Not a member of this tenant")
 		return

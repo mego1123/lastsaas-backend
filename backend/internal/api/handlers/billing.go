@@ -135,7 +135,11 @@ func (h *BillingHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 				"updatedAt":           time.Now(),
 			}
 			if plan.PricingModel == models.PricingModelPerSeat {
-				memberCount, _ := h.db.TenantMemberships().CountDocuments(ctx, bson.M{"tenantId": tenant.ID})
+				memberCount, memberErr := h.db.TenantMemberships().CountDocuments(ctx, bson.M{"tenantId": tenant.ID})
+				if memberErr != nil {
+					slog.Warn("Billing: failed to count tenant members for seat calculation", "tenantId", tenant.ID.Hex(), "error", memberErr)
+					memberCount = 0
+				}
 				seats := int(memberCount)
 				if seats < plan.MinSeats {
 					seats = plan.MinSeats
@@ -155,7 +159,11 @@ func (h *BillingHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 
 		// Per-seat billing
 		if plan.PricingModel == models.PricingModelPerSeat {
-			memberCount, _ := h.db.TenantMemberships().CountDocuments(ctx, bson.M{"tenantId": tenant.ID})
+			memberCount, memberErr := h.db.TenantMemberships().CountDocuments(ctx, bson.M{"tenantId": tenant.ID})
+			if memberErr != nil {
+				slog.Warn("Billing: failed to count tenant members for per-seat checkout", "tenantId", tenant.ID.Hex(), "error", memberErr)
+				memberCount = 0
+			}
 			seats := int(memberCount)
 			if seats < plan.MinSeats {
 				seats = plan.MinSeats
@@ -381,18 +389,22 @@ func (h *BillingHandler) ListTransactions(w http.ResponseWriter, r *http.Request
 	}
 
 	q := r.URL.Query()
-	page, _ := strconv.Atoi(q.Get("page"))
-	if page < 1 {
+	page, pageErr := strconv.Atoi(q.Get("page"))
+	if pageErr != nil || page < 1 {
 		page = 1
 	}
-	perPage, _ := strconv.Atoi(q.Get("perPage"))
-	if perPage < 1 || perPage > 100 {
+	perPage, perPageErr := strconv.Atoi(q.Get("perPage"))
+	if perPageErr != nil || perPage < 1 || perPage > 100 {
 		perPage = 20
 	}
 
 	filter := bson.M{"tenantId": tenant.ID}
 
-	total, _ := h.db.FinancialTransactions().CountDocuments(ctx, filter)
+	total, err := h.db.FinancialTransactions().CountDocuments(ctx, filter)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to count transactions")
+		return
+	}
 
 	opts := options.Find().
 		SetSort(bson.D{{Key: "createdAt", Value: -1}}).
@@ -598,7 +610,10 @@ func (h *BillingHandler) GetInvoicePDF(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="invoice-%s.pdf"`, tx.InvoiceNumber))
 	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
-	w.Write(buf.Bytes())
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		slog.Error("failed to write invoice PDF response", "transactionId", tx.ID.Hex(), "error", err)
+		return
+	}
 }
 
 // CancelSubscription cancels the current tenant's subscription at period end.
@@ -636,7 +651,11 @@ func (h *BillingHandler) CancelSubscription(w http.ResponseWriter, r *http.Reque
 	if periodEnd != nil {
 		updates["currentPeriodEnd"] = periodEnd
 	}
-	h.db.Tenants().UpdateOne(ctx, bson.M{"_id": tenant.ID}, bson.M{"$set": updates})
+	if _, err := h.db.Tenants().UpdateOne(ctx, bson.M{"_id": tenant.ID}, bson.M{"$set": updates}); err != nil {
+		slog.Error("Billing: failed to mark tenant subscription canceled", "tenantId", tenant.ID.Hex(), "error", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to update tenant subscription status")
+		return
+	}
 
 	h.syslog.High(ctx, fmt.Sprintf("Subscription canceled by user: tenant %s", tenant.ID.Hex()))
 
@@ -651,9 +670,9 @@ func (h *BillingHandler) CancelSubscription(w http.ResponseWriter, r *http.Reque
 	})
 
 	if h.telemetrySvc != nil {
-		user, _ := middleware.GetUserFromContext(ctx)
+		user, hasUser := middleware.GetUserFromContext(ctx)
 		var userIDPtr *primitive.ObjectID
-		if user != nil {
+		if hasUser && user != nil {
 			userIDPtr = &user.ID
 		}
 		h.telemetrySvc.Track(ctx, models.TelemetryEvent{
@@ -686,12 +705,12 @@ func (h *BillingHandler) AdminListTransactions(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 	q := r.URL.Query()
 
-	page, _ := strconv.Atoi(q.Get("page"))
-	if page < 1 {
+	page, pageErr := strconv.Atoi(q.Get("page"))
+	if pageErr != nil || page < 1 {
 		page = 1
 	}
-	perPage, _ := strconv.Atoi(q.Get("perPage"))
-	if perPage < 1 || perPage > 100 {
+	perPage, perPageErr := strconv.Atoi(q.Get("perPage"))
+	if perPageErr != nil || perPage < 1 || perPage > 100 {
 		perPage = 50
 	}
 
@@ -711,7 +730,11 @@ func (h *BillingHandler) AdminListTransactions(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	total, _ := h.db.FinancialTransactions().CountDocuments(ctx, filter)
+	total, err := h.db.FinancialTransactions().CountDocuments(ctx, filter)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to count transactions")
+		return
+	}
 
 	opts := options.Find().
 		SetSort(bson.D{{Key: "createdAt", Value: -1}}).
@@ -850,7 +873,11 @@ func (h *BillingHandler) computeLiveMetric(ctx context.Context, metric, dateStr 
 
 // computeLiveRevenue sums today's financial transactions directly.
 func (h *BillingHandler) computeLiveRevenue(ctx context.Context, dateStr string) int64 {
-	dayStart, _ := time.Parse("2006-01-02", dateStr)
+	dayStart, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		slog.Warn("computeLiveRevenue: failed to parse date string", "dateStr", dateStr, "error", err)
+		return 0
+	}
 	dayEnd := dayStart.Add(24 * time.Hour)
 
 	pipeline := bson.A{
@@ -865,6 +892,7 @@ func (h *BillingHandler) computeLiveRevenue(ctx context.Context, dateStr string)
 
 	cursor, err := h.db.FinancialTransactions().Aggregate(ctx, pipeline)
 	if err != nil {
+		slog.Warn("computeLiveRevenue: failed to aggregate financial transactions", "dateStr", dateStr, "error", err)
 		return 0
 	}
 	defer cursor.Close(ctx)
@@ -900,6 +928,7 @@ func (h *BillingHandler) computeLiveARR(ctx context.Context) int64 {
 
 	cursor, err := h.db.Tenants().Aggregate(ctx, pipeline)
 	if err != nil {
+		slog.Warn("computeLiveARR: failed to aggregate active tenant subscriptions", "error", err)
 		return 0
 	}
 	defer cursor.Close(ctx)
@@ -969,7 +998,11 @@ func (h *BillingHandler) AdminCancelSubscription(w http.ResponseWriter, r *http.
 		if periodEnd != nil {
 			updates["currentPeriodEnd"] = periodEnd
 		}
-		h.db.Tenants().UpdateOne(ctx, bson.M{"_id": tenantID}, bson.M{"$set": updates})
+		if _, err := h.db.Tenants().UpdateOne(ctx, bson.M{"_id": tenantID}, bson.M{"$set": updates}); err != nil {
+			slog.Error("Admin: failed to mark tenant subscription canceled", "tenantId", tenantID.Hex(), "error", err)
+			respondWithError(w, http.StatusInternalServerError, "Failed to update tenant subscription status")
+			return
+		}
 	}
 
 	h.syslog.High(ctx, fmt.Sprintf("Admin canceled subscription: tenant %s, immediate=%v", tenantID.Hex(), req.Immediate))

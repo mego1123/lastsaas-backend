@@ -48,10 +48,14 @@ func NewAdminHandler(database *db.MongoDB, emitter events.Emitter, sysLogger *sy
 
 // isRootTenantOwner returns true if the given user is the owner of the root tenant.
 func (h *AdminHandler) isRootTenantOwner(ctx context.Context, userID primitive.ObjectID) bool {
-	count, _ := h.db.TenantMemberships().CountDocuments(ctx, bson.M{
+	count, err := h.db.TenantMemberships().CountDocuments(ctx, bson.M{
 		"userId": userID,
 		"role":   models.RoleOwner,
 	})
+	if err != nil {
+		slog.Warn("isRootTenantOwner: failed to count owner memberships", "userId", userID.Hex(), "error", err)
+		return false
+	}
 	if count == 0 {
 		return false
 	}
@@ -112,12 +116,12 @@ func (h *AdminHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	// Pagination
-	page, _ := strconv.Atoi(q.Get("page"))
-	if page < 1 {
+	page, pageErr := strconv.Atoi(q.Get("page"))
+	if pageErr != nil || page < 1 {
 		page = 1
 	}
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit < 1 || limit > 100 {
+	limit, limitErr := strconv.Atoi(q.Get("limit"))
+	if limitErr != nil || limit < 1 || limit > 100 {
 		limit = 25
 	}
 	skip := int64((page - 1) * limit)
@@ -219,12 +223,17 @@ func (h *AdminHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build plan name lookup (bounded to 500 plans)
-	planCursor, _ := h.db.Plans().Find(ctx, bson.M{}, options.Find().SetLimit(500))
 	planNames := map[string]string{}
 	var systemPlanName string
-	if planCursor != nil {
+	planCursor, planErr := h.db.Plans().Find(ctx, bson.M{}, options.Find().SetLimit(500))
+	if planErr != nil {
+		slog.Warn("ListTenants: failed to load plans for name lookup", "error", planErr)
+	} else {
+		defer func() { _ = planCursor.Close(ctx) }()
 		var plans []models.Plan
-		planCursor.All(ctx, &plans)
+		if err := planCursor.All(ctx, &plans); err != nil {
+			slog.Warn("ListTenants: failed to decode plans", "error", err)
+		}
 		for _, p := range plans {
 			planNames[p.ID.Hex()] = p.Name
 			if p.IsSystem {
@@ -339,13 +348,17 @@ func (h *AdminHandler) ExportTenantsCSV(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Batch plan names
-	planCursor, _ := h.db.Plans().Find(ctx, bson.M{}, options.Find().SetLimit(500))
 	planNames := map[string]string{}
 	var systemPlanName string
-	if planCursor != nil {
+	planCursor, planErr := h.db.Plans().Find(ctx, bson.M{}, options.Find().SetLimit(500))
+	if planErr != nil {
+		slog.Warn("ExportTenantsCSV: failed to load plans for name lookup", "error", planErr)
+	} else {
+		defer func() { _ = planCursor.Close(ctx) }()
 		var plans []models.Plan
-		planCursor.All(ctx, &plans)
-		planCursor.Close(ctx)
+		if err := planCursor.All(ctx, &plans); err != nil {
+			slog.Warn("ExportTenantsCSV: failed to decode plans", "error", err)
+		}
 		for _, p := range plans {
 			planNames[p.ID.Hex()] = p.Name
 			if p.IsSystem {
@@ -361,7 +374,10 @@ func (h *AdminHandler) ExportTenantsCSV(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Disposition", "attachment; filename=tenants.csv")
 
 	writer := csv.NewWriter(w)
-	writer.Write([]string{"ID", "Name", "Slug", "IsRoot", "IsActive", "MemberCount", "PlanName", "BillingStatus", "Credits", "CreatedAt"})
+	if err := writer.Write([]string{"ID", "Name", "Slug", "IsRoot", "IsActive", "MemberCount", "PlanName", "BillingStatus", "Credits", "CreatedAt"}); err != nil {
+		slog.Error("ExportTenantsCSV: failed to write CSV header", "error", err)
+		return
+	}
 
 	for _, t := range tenants {
 		pName := systemPlanName
@@ -385,6 +401,9 @@ func (h *AdminHandler) ExportTenantsCSV(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 	writer.Flush()
+	if err := writer.Error(); err != nil {
+		slog.Error("ExportTenantsCSV: CSV writer error", "error", err)
+	}
 }
 
 func (h *AdminHandler) GetTenant(w http.ResponseWriter, r *http.Request) {
@@ -504,12 +523,12 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	// Pagination
-	page, _ := strconv.Atoi(q.Get("page"))
-	if page < 1 {
+	page, pageErr := strconv.Atoi(q.Get("page"))
+	if pageErr != nil || page < 1 {
 		page = 1
 	}
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit < 1 || limit > 100 {
+	limit, limitErr := strconv.Atoi(q.Get("limit"))
+	if limitErr != nil || limit < 1 || limit > 100 {
 		limit = 25
 	}
 	skip := int64((page - 1) * limit)
@@ -698,7 +717,10 @@ func (h *AdminHandler) ExportUsersCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=users.csv")
 
 	writer := csv.NewWriter(w)
-	writer.Write([]string{"ID", "Email", "DisplayName", "EmailVerified", "IsActive", "TenantCount", "CreatedAt", "LastLoginAt"})
+	if err := writer.Write([]string{"ID", "Email", "DisplayName", "EmailVerified", "IsActive", "TenantCount", "CreatedAt", "LastLoginAt"}); err != nil {
+		slog.Error("ExportUsersCSV: failed to write CSV header", "error", err)
+		return
+	}
 
 	for _, u := range users {
 		lastLogin := ""
@@ -717,6 +739,9 @@ func (h *AdminHandler) ExportUsersCSV(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writer.Flush()
+	if err := writer.Error(); err != nil {
+		slog.Error("ExportUsersCSV: CSV writer error", "error", err)
+	}
 }
 
 func (h *AdminHandler) UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
@@ -728,7 +753,11 @@ func (h *AdminHandler) UpdateUserStatus(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Non-owners cannot deactivate the root tenant owner
-	actingMembership, _ := middleware.GetMembershipFromContext(r.Context())
+	actingMembership, ok := middleware.GetMembershipFromContext(r.Context())
+	if !ok || actingMembership == nil {
+		respondWithError(w, http.StatusForbidden, "Membership context missing")
+		return
+	}
 	if actingMembership.Role != models.RoleOwner && h.isRootTenantOwner(r.Context(), userID) {
 		respondWithError(w, http.StatusForbidden, "Cannot modify the root tenant owner")
 		return
@@ -751,7 +780,11 @@ func (h *AdminHandler) UpdateUserStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	actingUser, _ := middleware.GetUserFromContext(r.Context())
+	actingUser, ok := middleware.GetUserFromContext(r.Context())
+	if !ok || actingUser == nil {
+		respondWithError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
 	action := "activated"
 	if !req.IsActive {
 		action = "deactivated"
@@ -781,8 +814,16 @@ func (h *AdminHandler) GetAbout(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userCount, _ := h.db.Users().CountDocuments(ctx, bson.M{})
-	tenantCount, _ := h.db.Tenants().CountDocuments(ctx, bson.M{})
+	userCount, err := h.db.Users().CountDocuments(ctx, bson.M{})
+	if err != nil {
+		slog.Warn("GetDashboard: failed to count users", "error", err)
+		userCount = 0
+	}
+	tenantCount, err := h.db.Tenants().CountDocuments(ctx, bson.M{})
+	if err != nil {
+		slog.Warn("GetDashboard: failed to count tenants", "error", err)
+		tenantCount = 0
+	}
 
 	// Health status
 	healthy := true
@@ -791,12 +832,30 @@ func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 	if h.health != nil && h.getConfig != nil {
 		metrics, err := h.health.GetCurrentMetrics(ctx)
 		if err == nil && len(metrics) > 0 {
-			cpuWarn, _ := strconv.ParseFloat(h.getConfig("health.cpu.warning_threshold"), 64)
-			cpuCrit, _ := strconv.ParseFloat(h.getConfig("health.cpu.critical_threshold"), 64)
-			memWarn, _ := strconv.ParseFloat(h.getConfig("health.memory.warning_threshold"), 64)
-			memCrit, _ := strconv.ParseFloat(h.getConfig("health.memory.critical_threshold"), 64)
-			diskWarn, _ := strconv.ParseFloat(h.getConfig("health.disk.warning_threshold"), 64)
-			diskCrit, _ := strconv.ParseFloat(h.getConfig("health.disk.critical_threshold"), 64)
+			cpuWarn, cpuWarnErr := strconv.ParseFloat(h.getConfig("health.cpu.warning_threshold"), 64)
+			if cpuWarnErr != nil {
+				slog.Warn("GetDashboard: invalid health.cpu.warning_threshold", "error", cpuWarnErr)
+			}
+			cpuCrit, cpuCritErr := strconv.ParseFloat(h.getConfig("health.cpu.critical_threshold"), 64)
+			if cpuCritErr != nil {
+				slog.Warn("GetDashboard: invalid health.cpu.critical_threshold", "error", cpuCritErr)
+			}
+			memWarn, memWarnErr := strconv.ParseFloat(h.getConfig("health.memory.warning_threshold"), 64)
+			if memWarnErr != nil {
+				slog.Warn("GetDashboard: invalid health.memory.warning_threshold", "error", memWarnErr)
+			}
+			memCrit, memCritErr := strconv.ParseFloat(h.getConfig("health.memory.critical_threshold"), 64)
+			if memCritErr != nil {
+				slog.Warn("GetDashboard: invalid health.memory.critical_threshold", "error", memCritErr)
+			}
+			diskWarn, diskWarnErr := strconv.ParseFloat(h.getConfig("health.disk.warning_threshold"), 64)
+			if diskWarnErr != nil {
+				slog.Warn("GetDashboard: invalid health.disk.warning_threshold", "error", diskWarnErr)
+			}
+			diskCrit, diskCritErr := strconv.ParseFloat(h.getConfig("health.disk.critical_threshold"), 64)
+			if diskCritErr != nil {
+				slog.Warn("GetDashboard: invalid health.disk.critical_threshold", "error", diskCritErr)
+			}
 
 			for _, m := range metrics {
 				node := m.NodeID
@@ -897,14 +956,19 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	cursor.All(r.Context(), &memberships)
 
 	// Build plan name lookup for membership details (bounded to 500 plans)
-	planCursor, _ := h.db.Plans().Find(r.Context(), bson.M{}, options.Find().SetLimit(500))
 	planNameMap := map[string]string{}
 	planIDMap := map[string]string{} // planOID hex -> planOID hex (for convenience)
 	var systemPlanName string
 	var systemPlanID string
-	if planCursor != nil {
+	planCursor, planErr := h.db.Plans().Find(r.Context(), bson.M{}, options.Find().SetLimit(500))
+	if planErr != nil {
+		slog.Warn("GetUser: failed to load plans for name lookup", "error", planErr)
+	} else {
+		defer func() { _ = planCursor.Close(r.Context()) }()
 		var allPlans []models.Plan
-		planCursor.All(r.Context(), &allPlans)
+		if err := planCursor.All(r.Context(), &allPlans); err != nil {
+			slog.Warn("GetUser: failed to decode plans", "error", err)
+		}
 		for _, p := range allPlans {
 			planNameMap[p.ID.Hex()] = p.Name
 			planIDMap[p.ID.Hex()] = p.ID.Hex()
@@ -992,7 +1056,11 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Non-owners cannot modify the root tenant owner
-	actingMembership, _ := middleware.GetMembershipFromContext(r.Context())
+	actingMembership, ok := middleware.GetMembershipFromContext(r.Context())
+	if !ok || actingMembership == nil {
+		respondWithError(w, http.StatusForbidden, "Membership context missing")
+		return
+	}
 	if actingMembership.Role != models.RoleOwner && h.isRootTenantOwner(r.Context(), userID) {
 		respondWithError(w, http.StatusForbidden, "Cannot modify the root tenant owner")
 		return
@@ -1013,7 +1081,11 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actingUser, _ := middleware.GetUserFromContext(r.Context())
+	actingUser, ok := middleware.GetUserFromContext(r.Context())
+	if !ok || actingUser == nil {
+		respondWithError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
 	updates := bson.M{"updatedAt": time.Now()}
 
 	if req.Email != nil {
@@ -1023,7 +1095,11 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if newEmail != user.Email {
-			count, _ := h.db.Users().CountDocuments(r.Context(), bson.M{"email": newEmail, "_id": bson.M{"$ne": userID}})
+			count, err := h.db.Users().CountDocuments(r.Context(), bson.M{"email": newEmail, "_id": bson.M{"$ne": userID}})
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, "Failed to check email uniqueness")
+				return
+			}
 			if count > 0 {
 				respondWithError(w, http.StatusConflict, "Email already in use by another account")
 				return
@@ -1042,7 +1118,10 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.db.Users().UpdateOne(r.Context(), bson.M{"_id": userID}, bson.M{"$set": updates})
+	if _, err := h.db.Users().UpdateOne(r.Context(), bson.M{"_id": userID}, bson.M{"$set": updates}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to update user")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "User updated"})
 }
 
@@ -1060,7 +1139,11 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Non-owners cannot change the root tenant owner's role
-	actingMembership, _ := middleware.GetMembershipFromContext(r.Context())
+	actingMembership, ok := middleware.GetMembershipFromContext(r.Context())
+	if !ok || actingMembership == nil {
+		respondWithError(w, http.StatusForbidden, "Membership context missing")
+		return
+	}
 	if actingMembership.Role != models.RoleOwner && h.isRootTenantOwner(r.Context(), userID) {
 		respondWithError(w, http.StatusForbidden, "Cannot modify the root tenant owner's role")
 		return
@@ -1116,7 +1199,11 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actingUser, _ := middleware.GetUserFromContext(ctx)
+	actingUser, ok := middleware.GetUserFromContext(ctx)
+	if !ok || actingUser == nil {
+		respondWithError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
 	h.syslog.HighWithUser(ctx,
 		fmt.Sprintf("User role changed: user %s in tenant %s (%s) -> %s (admin action)", userID.Hex(), tenant.Name, tenantID.Hex(), req.Role),
 		actingUser.ID)
@@ -1139,7 +1226,11 @@ func (h *AdminHandler) PreflightDeleteUser(w http.ResponseWriter, r *http.Reques
 	}
 
 	ctx := r.Context()
-	actingUser, _ := middleware.GetUserFromContext(ctx)
+	actingUser, ok := middleware.GetUserFromContext(ctx)
+	if !ok || actingUser == nil {
+		respondWithError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
 
 	if actingUser.ID == userID {
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{
@@ -1156,11 +1247,11 @@ func (h *AdminHandler) PreflightDeleteUser(w http.ResponseWriter, r *http.Reques
 	}
 	var ownerships []models.TenantMembership
 	if err := cursor.All(ctx, &ownerships); err != nil {
-		cursor.Close(ctx)
+		_ = cursor.Close(ctx)
 		respondWithError(w, http.StatusInternalServerError, "Failed to read memberships")
 		return
 	}
-	cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	// Batch-fetch tenants and members to avoid N+1 queries.
 	tenantIDs := make([]primitive.ObjectID, len(ownerships))
@@ -1172,13 +1263,13 @@ func (h *AdminHandler) PreflightDeleteUser(w http.ResponseWriter, r *http.Reques
 	if len(tenantIDs) > 0 {
 		tCursor, err := h.db.Tenants().Find(ctx, bson.M{"_id": bson.M{"$in": tenantIDs}})
 		if err == nil {
+			defer func() { _ = tCursor.Close(ctx) }()
 			var tenants []models.Tenant
 			if err := tCursor.All(ctx, &tenants); err == nil {
 				for _, t := range tenants {
 					tenantMap[t.ID] = t
 				}
 			}
-			tCursor.Close(ctx)
 		}
 	}
 
@@ -1191,11 +1282,14 @@ func (h *AdminHandler) PreflightDeleteUser(w http.ResponseWriter, r *http.Reques
 			"userId":   bson.M{"$ne": userID},
 		})
 		if err != nil {
+			slog.Warn("PreflightDeleteUser: failed to find tenant members", "tenantId", m.TenantID.Hex(), "error", err)
 			continue
 		}
+		defer func() { _ = memberCursor.Close(ctx) }()
 		var otherMemberships []models.TenantMembership
-		memberCursor.All(ctx, &otherMemberships)
-		memberCursor.Close(ctx)
+		if err := memberCursor.All(ctx, &otherMemberships); err != nil {
+			slog.Warn("PreflightDeleteUser: failed to decode tenant members", "tenantId", m.TenantID.Hex(), "error", err)
+		}
 
 		// Batch-fetch users for this tenant's other members.
 		otherUserIDs := make([]primitive.ObjectID, len(otherMemberships))
@@ -1206,13 +1300,13 @@ func (h *AdminHandler) PreflightDeleteUser(w http.ResponseWriter, r *http.Reques
 		if len(otherUserIDs) > 0 {
 			uCursor, err := h.db.Users().Find(ctx, bson.M{"_id": bson.M{"$in": otherUserIDs}})
 			if err == nil {
+				defer func() { _ = uCursor.Close(ctx) }()
 				var users []models.User
 				if err := uCursor.All(ctx, &users); err == nil {
 					for _, u := range users {
 						userMap[u.ID] = u
 					}
 				}
-				uCursor.Close(ctx)
 			}
 		}
 
@@ -1250,7 +1344,11 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actingUser, _ := middleware.GetUserFromContext(r.Context())
+	actingUser, ok := middleware.GetUserFromContext(r.Context())
+	if !ok || actingUser == nil {
+		respondWithError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
 	if actingUser.ID == userID {
 		respondWithError(w, http.StatusForbidden, "Cannot delete your own account")
 		return
@@ -1284,11 +1382,11 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	var memberships []models.TenantMembership
 	if err := cursor.All(ctx, &memberships); err != nil {
-		cursor.Close(ctx)
+		_ = cursor.Close(ctx)
 		respondWithError(w, http.StatusInternalServerError, "Failed to read memberships")
 		return
 	}
-	cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	// Handle owner memberships
 	for _, m := range memberships {
@@ -1313,10 +1411,14 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "Invalid replacement owner ID")
 				return
 			}
-			result, _ := h.db.TenantMemberships().UpdateOne(ctx,
+			result, err := h.db.TenantMemberships().UpdateOne(ctx,
 				bson.M{"userId": replacementID, "tenantId": m.TenantID},
 				bson.M{"$set": bson.M{"role": models.RoleOwner, "updatedAt": time.Now()}},
 			)
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, "Failed to transfer ownership to replacement owner")
+				return
+			}
 			if result.MatchedCount == 0 {
 				respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Replacement owner is not a member of tenant '%s'", tenant.Name))
 				return
@@ -1325,10 +1427,14 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 				fmt.Sprintf("Tenant '%s' ownership transferred to %s (prior owner %s being deleted)", tenant.Name, replacementStr, user.Email),
 				actingUser.ID)
 		} else {
-			otherCount, _ := h.db.TenantMemberships().CountDocuments(ctx, bson.M{
+			otherCount, err := h.db.TenantMemberships().CountDocuments(ctx, bson.M{
 				"tenantId": m.TenantID,
 				"userId":   bson.M{"$ne": userID},
 			})
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, "Failed to count tenant members")
+				return
+			}
 			if otherCount > 0 {
 				respondWithError(w, http.StatusBadRequest, fmt.Sprintf("User is owner of tenant '%s' which has other members. Provide a replacement owner.", tenant.Name))
 				return
@@ -1345,9 +1451,15 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, fmt.Sprintf("User is the sole member of tenant '%s'. Confirm tenant deletion.", tenant.Name))
 				return
 			}
-			h.db.TenantMemberships().DeleteMany(ctx, bson.M{"tenantId": m.TenantID})
-			h.db.Tenants().DeleteOne(ctx, bson.M{"_id": m.TenantID})
-			h.db.Invitations().DeleteMany(ctx, bson.M{"tenantId": m.TenantID})
+			if _, err := h.db.TenantMemberships().DeleteMany(ctx, bson.M{"tenantId": m.TenantID}); err != nil {
+				slog.Error("DeleteUser: failed to remove tenant memberships during tenant teardown", "tenantId", m.TenantID.Hex(), "error", err)
+			}
+			if _, err := h.db.Tenants().DeleteOne(ctx, bson.M{"_id": m.TenantID}); err != nil {
+				slog.Error("DeleteUser: failed to delete tenant during teardown", "tenantId", m.TenantID.Hex(), "error", err)
+			}
+			if _, err := h.db.Invitations().DeleteMany(ctx, bson.M{"tenantId": m.TenantID}); err != nil {
+				slog.Error("DeleteUser: failed to remove invitations during tenant teardown", "tenantId", m.TenantID.Hex(), "error", err)
+			}
 			h.syslog.HighWithUser(ctx,
 				fmt.Sprintf("Tenant '%s' deleted (sole member %s was deleted)", tenant.Name, user.Email),
 				actingUser.ID)
@@ -1364,10 +1476,20 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete user's data
-	h.db.TenantMemberships().DeleteMany(ctx, bson.M{"userId": userID})
-	h.db.RefreshTokens().DeleteMany(ctx, bson.M{"userId": userID})
-	h.db.Messages().DeleteMany(ctx, bson.M{"userId": userID})
-	h.db.Users().DeleteOne(ctx, bson.M{"_id": userID})
+	if _, err := h.db.TenantMemberships().DeleteMany(ctx, bson.M{"userId": userID}); err != nil {
+		slog.Error("DeleteUser: failed to remove user memberships", "userId", userID.Hex(), "error", err)
+	}
+	if _, err := h.db.RefreshTokens().DeleteMany(ctx, bson.M{"userId": userID}); err != nil {
+		slog.Error("DeleteUser: failed to revoke user refresh tokens", "userId", userID.Hex(), "error", err)
+	}
+	if _, err := h.db.Messages().DeleteMany(ctx, bson.M{"userId": userID}); err != nil {
+		slog.Error("DeleteUser: failed to remove user messages", "userId", userID.Hex(), "error", err)
+	}
+	if _, err := h.db.Users().DeleteOne(ctx, bson.M{"_id": userID}); err != nil {
+		slog.Error("DeleteUser: failed to delete user record", "userId", userID.Hex(), "error", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to delete user")
+		return
+	}
 
 	h.syslog.HighWithUser(ctx,
 		fmt.Sprintf("User deleted: %s (%s) (admin action)", user.Email, userID.Hex()),
@@ -1409,7 +1531,11 @@ func (h *AdminHandler) UpdateTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actingUser, _ := middleware.GetUserFromContext(r.Context())
+	actingUser, ok := middleware.GetUserFromContext(r.Context())
+	if !ok || actingUser == nil {
+		respondWithError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
 	updates := bson.M{"updatedAt": time.Now()}
 
 	if req.Name != nil {
@@ -1458,7 +1584,10 @@ func (h *AdminHandler) UpdateTenant(w http.ResponseWriter, r *http.Request) {
 			actingUser.ID)
 	}
 
-	h.db.Tenants().UpdateOne(r.Context(), bson.M{"_id": tenantID}, bson.M{"$set": updates})
+	if _, err := h.db.Tenants().UpdateOne(r.Context(), bson.M{"_id": tenantID}, bson.M{"$set": updates}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to update tenant")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Tenant updated"})
 }
 
@@ -1706,10 +1835,14 @@ func (h *AdminHandler) InviteRootMember(w http.ResponseWriter, r *http.Request) 
 	// Check if already a member
 	var existingUser models.User
 	if h.db.Users().FindOne(ctx, bson.M{"email": req.Email}).Decode(&existingUser) == nil {
-		count, _ := h.db.TenantMemberships().CountDocuments(ctx, bson.M{
+		count, err := h.db.TenantMemberships().CountDocuments(ctx, bson.M{
 			"userId":   existingUser.ID,
 			"tenantId": rootTenant.ID,
 		})
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to check existing root tenant membership")
+			return
+		}
 		if count > 0 {
 			respondWithError(w, http.StatusConflict, "User is already a member of the root tenant")
 			return
@@ -1717,13 +1850,17 @@ func (h *AdminHandler) InviteRootMember(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Check if invitation already pending
-	count, _ := h.db.Invitations().CountDocuments(ctx, bson.M{
+	invCount, err := h.db.Invitations().CountDocuments(ctx, bson.M{
 		"tenantId":  rootTenant.ID,
 		"email":     req.Email,
 		"status":    models.InvitationPending,
 		"expiresAt": bson.M{"$gt": time.Now()},
 	})
-	if count > 0 {
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to check existing root tenant invitations")
+		return
+	}
+	if invCount > 0 {
 		respondWithError(w, http.StatusConflict, "An invitation has already been sent to this email")
 		return
 	}

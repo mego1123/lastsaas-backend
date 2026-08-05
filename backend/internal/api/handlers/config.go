@@ -104,7 +104,11 @@ func (h *ConfigHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	h.syslog.Critical(r.Context(), fmt.Sprintf("Config variable '%s' updated", name))
 
-	updated, _ := h.store.GetVar(name)
+	updated, ok := h.store.GetVar(name)
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Failed to reload config variable")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, updated)
 }
 

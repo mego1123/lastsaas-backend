@@ -169,10 +169,14 @@ func (h *TenantHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
 	// Check if user is already a member
 	var existingUser models.User
 	if err := h.db.Users().FindOne(r.Context(), bson.M{"email": req.Email}).Decode(&existingUser); err == nil {
-		count, _ := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{
+		count, err := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{
 			"userId":   existingUser.ID,
 			"tenantId": tenant.ID,
 		})
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to check existing membership")
+			return
+		}
 		if count > 0 {
 			respondWithError(w, http.StatusConflict, "User is already a member of this tenant")
 			return
@@ -180,13 +184,17 @@ func (h *TenantHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if invitation already exists
-	count, _ := h.db.Invitations().CountDocuments(r.Context(), bson.M{
+	invCount, err := h.db.Invitations().CountDocuments(r.Context(), bson.M{
 		"tenantId":  tenant.ID,
 		"email":     req.Email,
 		"status":    models.InvitationPending,
 		"expiresAt": bson.M{"$gt": time.Now()},
 	})
-	if count > 0 {
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to check existing invitations")
+		return
+	}
+	if invCount > 0 {
 		respondWithError(w, http.StatusConflict, "An invitation has already been sent to this email")
 		return
 	}
@@ -194,9 +202,13 @@ func (h *TenantHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
 	// Enforce plan user limit
 	var tenantPlan models.Plan
 	if tenant.PlanID != nil {
-		h.db.Plans().FindOne(r.Context(), bson.M{"_id": *tenant.PlanID}).Decode(&tenantPlan)
+		if err := h.db.Plans().FindOne(r.Context(), bson.M{"_id": *tenant.PlanID}).Decode(&tenantPlan); err != nil {
+			slog.Warn("InviteMember: failed to load tenant plan by ID", "tenantId", tenant.ID.Hex(), "planId", tenant.PlanID.Hex(), "error", err)
+		}
 	} else {
-		h.db.Plans().FindOne(r.Context(), bson.M{"isSystem": true}).Decode(&tenantPlan)
+		if err := h.db.Plans().FindOne(r.Context(), bson.M{"isSystem": true}).Decode(&tenantPlan); err != nil {
+			slog.Warn("InviteMember: failed to load system plan", "tenantId", tenant.ID.Hex(), "error", err)
+		}
 	}
 	now := time.Now()
 	token := generateRandomToken()
@@ -221,15 +233,25 @@ func (h *TenantHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		memberCount, _ := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{"tenantId": tenant.ID})
-		pendingCount, _ := h.db.Invitations().CountDocuments(r.Context(), bson.M{
+		memberCount, err := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{"tenantId": tenant.ID})
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to count tenant members")
+			return
+		}
+		pendingCount, err := h.db.Invitations().CountDocuments(r.Context(), bson.M{
 			"tenantId":  tenant.ID,
 			"status":    models.InvitationPending,
 			"expiresAt": bson.M{"$gt": now},
 		})
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to count pending invitations")
+			return
+		}
 		if memberCount+pendingCount > int64(tenantPlan.UserLimit) {
 			// Over limit — roll back the invitation we just created
-			h.db.Invitations().DeleteOne(r.Context(), bson.M{"_id": invitation.ID})
+			if _, err := h.db.Invitations().DeleteOne(r.Context(), bson.M{"_id": invitation.ID}); err != nil {
+				slog.Error("InviteMember: failed to roll back invitation after user limit exceeded", "invitationId", invitation.ID.Hex(), "error", err)
+			}
 			respondWithJSON(w, http.StatusForbidden, map[string]interface{}{
 				"error":     fmt.Sprintf("User limit reached. Your plan allows %d users.", tenantPlan.UserLimit),
 				"code":      "USER_LIMIT_REACHED",
@@ -246,7 +268,11 @@ func (h *TenantHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
 
 	// Auto-adjust seat quantity for per-seat plans
 	if h.stripe != nil && tenant.StripeSubscriptionID != "" && tenantPlan.PricingModel == models.PricingModelPerSeat {
-		memberCount, _ := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{"tenantId": tenant.ID})
+		memberCount, err := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{"tenantId": tenant.ID})
+		if err != nil {
+			slog.Warn("InviteMember: failed to count tenant members for seat calculation", "tenantId", tenant.ID.Hex(), "error", err)
+			memberCount = 0
+		}
 		newSeats := int(memberCount) + 1 // +1 for incoming member
 		if newSeats < tenantPlan.MinSeats {
 			newSeats = tenantPlan.MinSeats
@@ -254,7 +280,9 @@ func (h *TenantHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
 		if err := h.stripe.UpdateSubscriptionQuantity(r.Context(), tenant.StripeSubscriptionID, int64(newSeats)); err != nil {
 			slog.Error("Failed to update seat quantity", "tenantId", tenant.ID.Hex(), "error", err)
 		} else {
-			h.db.Tenants().UpdateOne(r.Context(), bson.M{"_id": tenant.ID}, bson.M{"$set": bson.M{"seatQuantity": newSeats, "updatedAt": time.Now()}})
+			if _, err := h.db.Tenants().UpdateOne(r.Context(), bson.M{"_id": tenant.ID}, bson.M{"$set": bson.M{"seatQuantity": newSeats, "updatedAt": time.Now()}}); err != nil {
+				slog.Error("InviteMember: failed to persist seat quantity", "tenantId", tenant.ID.Hex(), "error", err)
+			}
 		}
 	}
 
@@ -342,7 +370,11 @@ func (h *TenantHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	if h.stripe != nil && tenant.StripeSubscriptionID != "" && tenant.PlanID != nil {
 		var plan models.Plan
 		if h.db.Plans().FindOne(r.Context(), bson.M{"_id": *tenant.PlanID}).Decode(&plan) == nil && plan.PricingModel == models.PricingModelPerSeat {
-			memberCount, _ := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{"tenantId": tenant.ID})
+			memberCount, err := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{"tenantId": tenant.ID})
+			if err != nil {
+				slog.Warn("RemoveMember: failed to count tenant members for seat calculation", "tenantId", tenant.ID.Hex(), "error", err)
+				memberCount = 0
+			}
 			newSeats := int(memberCount)
 			if newSeats < plan.MinSeats {
 				newSeats = plan.MinSeats
@@ -353,7 +385,9 @@ func (h *TenantHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 			if err := h.stripe.UpdateSubscriptionQuantity(r.Context(), tenant.StripeSubscriptionID, int64(newSeats)); err != nil {
 				slog.Error("Failed to update seat quantity", "tenant", tenant.ID.Hex(), "error", err)
 			} else {
-				h.db.Tenants().UpdateOne(r.Context(), bson.M{"_id": tenant.ID}, bson.M{"$set": bson.M{"seatQuantity": newSeats, "updatedAt": time.Now()}})
+				if _, err := h.db.Tenants().UpdateOne(r.Context(), bson.M{"_id": tenant.ID}, bson.M{"$set": bson.M{"seatQuantity": newSeats, "updatedAt": time.Now()}}); err != nil {
+					slog.Error("RemoveMember: failed to persist seat quantity", "tenantId", tenant.ID.Hex(), "error", err)
+				}
 			}
 		}
 	}
@@ -471,10 +505,14 @@ func (h *TenantHandler) TransferOwnership(w http.ResponseWriter, r *http.Request
 	}
 
 	// Verify target is a member
-	count, _ := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{
+	count, err := h.db.TenantMemberships().CountDocuments(r.Context(), bson.M{
 		"userId":   targetUserID,
 		"tenantId": tenant.ID,
 	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to verify target membership")
+		return
+	}
 	if count == 0 {
 		respondWithError(w, http.StatusNotFound, "Target user is not a member of this tenant")
 		return
@@ -565,7 +603,11 @@ func (h *TenantHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, _ := h.db.SystemLogs().CountDocuments(r.Context(), filter)
+	total, err := h.db.SystemLogs().CountDocuments(r.Context(), filter)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to count activity logs")
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"logs":  logs,
@@ -597,7 +639,10 @@ func (h *TenantHandler) UpdateTenantSettings(w http.ResponseWriter, r *http.Requ
 		updates["name"] = name
 	}
 
-	h.db.Tenants().UpdateOne(r.Context(), bson.M{"_id": tenant.ID}, bson.M{"$set": updates})
+	if _, err := h.db.Tenants().UpdateOne(r.Context(), bson.M{"_id": tenant.ID}, bson.M{"$set": updates}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to update tenant settings")
+		return
+	}
 
 	if user, ok := middleware.GetUserFromContext(r.Context()); ok {
 		h.syslog.LogTenantActivity(r.Context(), models.LogLow, fmt.Sprintf("Tenant settings updated for %s", tenant.Name),

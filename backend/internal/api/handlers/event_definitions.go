@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -131,7 +132,11 @@ func (h *EventDefinitionsHandler) CreateEventDefinition(w http.ResponseWriter, r
 	ctx := r.Context()
 
 	// Check uniqueness.
-	count, _ := h.db.EventDefinitions().CountDocuments(ctx, bson.M{"name": req.Name})
+	count, err := h.db.EventDefinitions().CountDocuments(ctx, bson.M{"name": req.Name})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to check event definition name uniqueness")
+		return
+	}
 	if count > 0 {
 		respondWithError(w, http.StatusConflict, "An event definition with this name already exists")
 		return
@@ -153,7 +158,11 @@ func (h *EventDefinitionsHandler) CreateEventDefinition(w http.ResponseWriter, r
 			return
 		}
 		// Verify parent exists.
-		count, _ := h.db.EventDefinitions().CountDocuments(ctx, bson.M{"_id": parentID})
+		count, pErr := h.db.EventDefinitions().CountDocuments(ctx, bson.M{"_id": parentID})
+		if pErr != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to verify parent event definition")
+			return
+		}
 		if count == 0 {
 			respondWithError(w, http.StatusBadRequest, "Parent event definition not found")
 			return
@@ -207,7 +216,11 @@ func (h *EventDefinitionsHandler) UpdateEventDefinition(w http.ResponseWriter, r
 
 	// Check uniqueness if name changed.
 	if req.Name != existing.Name {
-		count, _ := h.db.EventDefinitions().CountDocuments(ctx, bson.M{"name": req.Name, "_id": bson.M{"$ne": defID}})
+		count, err := h.db.EventDefinitions().CountDocuments(ctx, bson.M{"name": req.Name, "_id": bson.M{"$ne": defID}})
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to check event definition name uniqueness")
+			return
+		}
 		if count > 0 {
 			respondWithError(w, http.StatusConflict, "An event definition with this name already exists")
 			return
@@ -233,7 +246,11 @@ func (h *EventDefinitionsHandler) UpdateEventDefinition(w http.ResponseWriter, r
 			return
 		}
 		// Verify parent exists.
-		count, _ := h.db.EventDefinitions().CountDocuments(ctx, bson.M{"_id": parentID})
+		count, pErr := h.db.EventDefinitions().CountDocuments(ctx, bson.M{"_id": parentID})
+		if pErr != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to verify parent event definition")
+			return
+		}
 		if count == 0 {
 			respondWithError(w, http.StatusBadRequest, "Parent event definition not found")
 			return
@@ -258,7 +275,10 @@ func (h *EventDefinitionsHandler) UpdateEventDefinition(w http.ResponseWriter, r
 
 	// Return updated document.
 	var updated models.EventDefinition
-	h.db.EventDefinitions().FindOne(ctx, bson.M{"_id": defID}).Decode(&updated)
+	if err := h.db.EventDefinitions().FindOne(ctx, bson.M{"_id": defID}).Decode(&updated); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to reload updated event definition")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, updated)
 }
 
@@ -441,7 +461,11 @@ func (h *EventDefinitionsHandler) wouldCreateCycle(ctx context.Context, defID, p
 		visited[current] = true
 		var parent models.EventDefinition
 		err := h.db.EventDefinitions().FindOne(ctx, bson.M{"_id": current}).Decode(&parent)
-		if err != nil || parent.ParentID == nil {
+		if err != nil {
+			slog.Warn("failed to look up parent during cycle check", "id", current, "error", err)
+			return false
+		}
+		if parent.ParentID == nil {
 			return false
 		}
 		current = *parent.ParentID
