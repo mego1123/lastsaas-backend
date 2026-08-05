@@ -1,21 +1,21 @@
 # Graph Report - lastsaas  (2026-08-05)
 
 ## Corpus Check
-- 239 files · ~187,586 words
+- 239 files · ~187,751 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2635 nodes · 6433 edges · 169 communities (141 shown, 28 thin omitted)
-- Extraction: 79% EXTRACTED · 21% INFERRED · 0% AMBIGUOUS · INFERRED: 1341 edges (avg confidence: 0.8)
+- 2656 nodes · 6348 edges · 182 communities (145 shown, 37 thin omitted)
+- Extraction: 80% EXTRACTED · 20% INFERRED · 0% AMBIGUOUS · INFERRED: 1256 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e59f9941`
+- Built from commit: `50f1d1bb`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- setupTestServer
+- CreateTestUser
 - WebhookHandler
 - getErrorMessage
 - useAuth
@@ -33,7 +33,7 @@
 - middleware/tenant_test.go
 - PMPage.tsx
 - setupIsolationEnv
-- GetUserFromContext
+- AdminHandler
 - JWTService
 - Validate
 - NewTOTPService
@@ -47,9 +47,9 @@
 - NewMetricsCollector
 - ui/index.ts
 - compilerOptions
-- Logger
-- ResendService
-- PlansHandler
+- PMHandler
+- HealthHandler
+- GetUserFromContext
 - cmd_mcp.go
 - Service
 - models/health.go
@@ -60,7 +60,7 @@
 - printJSON
 - connectDB
 - AllSchemas
-- handlers/auth.go
+- User
 - BillingHandler
 - LogHandler
 - crypto_test.go
@@ -72,7 +72,7 @@
 - Features
 - process.go
 - emitter.go
-- MicrosoftOAuthService
+- createAdminEnv
 - BootstrapHandler
 - admin.go
 - ConfigHandler
@@ -84,8 +84,8 @@
 - models_test.go
 - cmdUsersGet
 - Service
-- PlanPage.tsx
-- ConfigPage.tsx
+- PlansPage.tsx
+- ReadResponseBody
 - keywords
 - clr
 - LogCategory
@@ -100,8 +100,8 @@
 - BodySizeLimit
 - server.json
 - AnnouncementsHandler
-- Service
-- TenantContext.tsx
+- setupTestServer
+- useTenant
 - scripts
 - ErrorBoundary
 - models/branding.go
@@ -110,10 +110,10 @@
 - Setting Up Stripe Billing
 - MCP Server Setup
 - cmdDoctor
-- NewGoogleOAuthService
+- plans_test.go
 - counter_test.go
 - models/billing.go
-- CheckAndMigrate
+- testutil.go
 - LastSaaS Development Rules
 - server_url
 - Quick Start
@@ -121,7 +121,7 @@
 - SystemLog
 - SSOConnection
 - package.json
-- IntegrationsPanel.tsx
+- InsertTestLogs
 - Plan
 - WebhookEventType
 - Announcement
@@ -136,7 +136,7 @@
 - React + TypeScript + Vite
 - glama.json
 - platforms
-- APIKeysHandler
+- EventDefinitionModal.tsx
 - APIVersion
 - Recovery
 - tsconfig.json
@@ -173,71 +173,84 @@
 - FunnelStep
 - KPIData
 - PlanShare
+- Button.tsx
+- ValidConfigVarType
+- Alert.tsx
+- Badge.tsx
+- Context
+- Duration
+- MongoDB
+- ObjectID
+- Request
+- ResponseWriter
+- Service
+- Time
+- MembershipInfo
 
 ## God Nodes (most connected - your core abstractions)
 1. `setupTestServer()` - 152 edges
-2. `respondWithError()` - 146 edges
-3. `respondWithJSON()` - 144 edges
+2. `respondWithJSON()` - 118 edges
+3. `respondWithError()` - 115 edges
 4. `CreateTestUser()` - 81 edges
 5. `createAdminEnv()` - 76 edges
 6. `MarkSystemInitialized()` - 64 edges
 7. `AuthHandler` - 60 edges
-8. `GetUserFromContext()` - 58 edges
-9. `CreateTestTenant()` - 56 edges
-10. `getErrorMessage()` - 56 edges
+8. `CreateTestTenant()` - 56 edges
+9. `getErrorMessage()` - 56 edges
+10. `MongoDB` - 44 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `main()` --calls--> `parseGlobalFlags()`  [INFERRED]
   backend/cmd/lastsaas/main.go → backend/cmd/lastsaas/output.go
 - `init()` --calls--> `BillingStatus`  [INFERRED]
   backend/internal/validation/validate.go → backend/internal/models/billing.go
+- `setupTestServer()` --calls--> `NewAuthHandler()`  [INFERRED]
+  backend/internal/api/handlers/testhelpers_test.go → backend/internal/api/handlers/auth.go
 - `main()` --calls--> `cmdDB()`  [INFERRED]
   backend/cmd/lastsaas/main.go → backend/cmd/lastsaas/cmd_db.go
 - `cmdDBStats()` --calls--> `connectDB()`  [INFERRED]
   backend/cmd/lastsaas/cmd_db.go → backend/cmd/lastsaas/main.go
-- `cmdDoctor()` --calls--> `bold()`  [INFERRED]
-  backend/cmd/lastsaas/cmd_doctor.go → backend/cmd/lastsaas/output.go
 
 ## Import Cycles
 - None detected.
 
-## Communities (169 total, 28 thin omitted)
+## Communities (182 total, 37 thin omitted)
 
-### Community 0 - "setupTestServer"
-Cohesion: 0.05
-Nodes (155): T, TestIntegration_AdminCancelRootInvitation(), TestIntegration_AdminChangeRootMemberRole(), TestIntegration_AdminDashboard(), TestIntegration_AdminGetTenant(), TestIntegration_AdminGetTenantNotFound(), TestIntegration_AdminGetUser(), TestIntegration_AdminGetUserNotFound() (+147 more)
+### Community 0 - "CreateTestUser"
+Cohesion: 0.17
+Nodes (48): T, TestIntegration_AdminBilling_NonRootTenantForbidden(), TestIntegration_AdminGetMetrics_Returns(), TestIntegration_AdminListTransactions_Empty(), TestIntegration_Billing_NonRootTenantCanAccess(), TestIntegration_Billing_UnauthenticatedForbidden(), TestIntegration_BillingConfig_NilStripe_ReturnsEmptyKey(), TestIntegration_CancelSubscription_NoSubscription() (+40 more)
 
 ### Community 1 - "WebhookHandler"
 Cohesion: 0.17
 Nodes (16): extractInstanceFromEvent(), Context, Emitter, Event, Logger, MongoDB, ObjectID, Request (+8 more)
 
 ### Community 2 - "getErrorMessage"
-Cohesion: 0.10
-Nodes (36): adminApi, AdminRoute(), ConfirmModal(), ConfirmModalProps, TableSkeleton(), TableSkeletonProps, useTenant(), AboutPage() (+28 more)
+Cohesion: 0.08
+Nodes (35): adminApi, TableSkeleton(), TableSkeletonProps, AboutPage(), AnnouncementFormData, AnnouncementFormModal(), announcementSchema, AnnouncementsPage() (+27 more)
 
 ### Community 3 - "useAuth"
-Cohesion: 0.08
-Nodes (36): dompurify, dompurify, announcementsApi, setAuthToken(), BrandingThemeInjector(), generatePalette(), isValidHex(), ImpersonationBanner() (+28 more)
+Cohesion: 0.07
+Nodes (39): dompurify, dompurify, announcementsApi, setAuthToken(), BrandingThemeInjector(), generatePalette(), isValidHex(), ImpersonationBanner() (+31 more)
 
 ### Community 4 - "types/index.ts"
 Cohesion: 0.04
-Nodes (64): api, brandingAdminApi, brandingApi, refreshSubscribers, usageApi, BrandingContextValue, BrandingPage(), Tab (+56 more)
+Nodes (52): api, brandingAdminApi, brandingApi, refreshSubscribers, usageApi, BrandingContextValue, BrandingPage(), Tab (+44 more)
 
 ### Community 5 - "Service"
 Cohesion: 0.11
 Nodes (23): buildFunnelSteps(), Context, M, MongoDB, ObjectID, TelemetryEvent, Time, mergeBson() (+15 more)
 
 ### Community 6 - "AuthHandler"
-Cohesion: 0.14
-Nodes (14): GoogleOAuthService, Context, Duration, MongoDB, ObjectID, Request, ResponseWriter, Service (+6 more)
+Cohesion: 0.07
+Nodes (37): AuthCodeTokenData, hashToken(), NewAuthHandler(), storeRefreshToken(), Context, Duration, Emitter, GitHubOAuthService (+29 more)
 
 ### Community 7 - "oauth_test.go"
-Cohesion: 0.17
-Nodes (26): mockTransport, NewGitHubOAuthService(), HandlerFunc, T, Token, mockToken(), TestGitHubExchangeCodeFailure(), TestGitHubExchangeCodeSuccess() (+18 more)
+Cohesion: 0.08
+Nodes (40): GoogleOAuthService, GoogleUserInfo, MicrosoftOAuthService, MicrosoftUserInfo, mockTransport, NewGitHubOAuthService(), Context, Token (+32 more)
 
 ### Community 8 - "App.tsx"
-Cohesion: 0.04
-Nodes (42): bootstrapApi, messagesApi, tenantApi, AdminAboutPage, AdminAnnouncementsPage, AdminAPIPage, AdminBrandingPage, AdminConfigPage (+34 more)
+Cohesion: 0.05
+Nodes (40): bootstrapApi, tenantApi, AdminAboutPage, AdminAnnouncementsPage, AdminAPIPage, AdminBrandingPage, AdminConfigPage, AdminDashboardPage (+32 more)
 
 ### Community 9 - "Service"
 Cohesion: 0.13
@@ -248,7 +261,7 @@ Cohesion: 0.08
 Nodes (5): Collection, Context, Database, MongoDB, NewMongoDB()
 
 ### Community 11 - "Client"
-Cohesion: 0.08
+Cohesion: 0.09
 Nodes (23): GitHubEmail, GitHubOAuthService, GitHubUserInfo, Context, Token, Context, IntegrationCheck, LogSeverity (+15 more)
 
 ### Community 12 - "PromotionsHandler"
@@ -260,24 +273,24 @@ Cohesion: 0.11
 Nodes (42): expandEnvVars(), Load(), LoadEnvFile(), findConfigDir(), T, hasYAMLFiles(), setupTestEnv(), TestEnvVarExpansion() (+34 more)
 
 ### Community 14 - "HealthPage.tsx"
-Cohesion: 0.12
-Nodes (28): ChartCard(), ChartCardProps, avg(), CurrentStatusPanel(), CurrentStatusPanelProps, formatBytes(), formatMs(), formatPercent() (+20 more)
+Cohesion: 0.09
+Nodes (34): ChartCard(), ChartCardProps, avg(), CurrentStatusPanel(), CurrentStatusPanelProps, formatBytes(), formatMs(), formatPercent() (+26 more)
 
 ### Community 15 - "middleware/tenant_test.go"
 Cohesion: 0.06
 Nodes (51): MongoDB, Request, ResponseWriter, NewUsageHandler(), GetAPIKeyFromContext(), GetImpersonatedBy(), APIKey, Context (+43 more)
 
 ### Community 16 - "PMPage.tsx"
-Cohesion: 0.07
-Nodes (33): pmApi, Card(), CardProps, paddingClasses, Modal(), ModalProps, EventDefinitionModal(), FormData (+25 more)
+Cohesion: 0.10
+Nodes (23): pmApi, binChartData(), EngagementTab(), EventSubTab, FlowSubTab(), formatCents(), formatNum(), formatPct() (+15 more)
 
 ### Community 17 - "setupIsolationEnv"
 Cohesion: 0.11
 Nodes (30): PasswordService, T, User, setupIsolationEnv(), TestIntegration_Admin_CanInviteUsers_NotAdmins(), TestIntegration_NonRootAdmin_CannotAccessDashboard(), TestIntegration_NonRootAdmin_CannotListAPIKeys(), TestIntegration_NonRootAdmin_CannotListLogs() (+22 more)
 
-### Community 18 - "GetUserFromContext"
-Cohesion: 0.15
-Nodes (18): decodeJSON(), Context, Emitter, Logger, MongoDB, ObjectID, Request, ResponseWriter (+10 more)
+### Community 18 - "AdminHandler"
+Cohesion: 0.17
+Nodes (14): decodeJSON(), Context, Emitter, Logger, MongoDB, ObjectID, Request, ResponseWriter (+6 more)
 
 ### Community 19 - "JWTService"
 Cohesion: 0.11
@@ -288,7 +301,7 @@ Cohesion: 0.16
 Nodes (34): formatFieldError(), T, User, TestValidate_APIKeyInvalidAuthority(), TestValidate_ConfigVarInvalidType(), TestValidate_CreditBundleZeroCredits(), TestValidate_ErrorFormatting(), TestValidate_InvitationInvalidStatus() (+26 more)
 
 ### Community 21 - "NewTOTPService"
-Cohesion: 0.13
+Cohesion: 0.14
 Nodes (24): TOTPService, NewTOTPService(), NewTOTPServiceWithEncryption(), T, TestGenerateRecoveryCodes_Count(), TestGenerateRecoveryCodes_Format(), TestGenerateRecoveryCodes_HashesMatchPlain(), TestGenerateRecoveryCodes_Uniqueness() (+16 more)
 
 ### Community 22 - "openapi.go"
@@ -296,20 +309,20 @@ Cohesion: 0.11
 Nodes (32): apiReference(), authBadge(), authLabel(), DocsHTML(), DocsMarkdown(), Request, ResponseWriter, stripHTML() (+24 more)
 
 ### Community 23 - "RateLimiter"
-Cohesion: 0.12
+Cohesion: 0.13
 Nodes (21): Duration, HandlerFunc, Request, RWMutex, Time, NewDistributedRateLimiter(), NewRateLimiter(), T (+13 more)
 
 ### Community 24 - "MustConnectTestDB"
 Cohesion: 0.06
-Nodes (110): APIKeyAuthority, NewJWTService(), NewAuthMiddleware(), T, setupAuthMiddleware(), TestGetClientIPFlyClientIP(), TestGetClientIPFlyClientIPInvalid(), TestRateLimiterCleanupExpired() (+102 more)
+Nodes (101): NewJWTService(), NewAuthMiddleware(), T, setupAuthMiddleware(), TestGetClientIPFlyClientIP(), TestGetClientIPFlyClientIPInvalid(), TestRateLimiterCleanupExpired(), TestRequireAuthAdminAPIKey() (+93 more)
 
 ### Community 25 - "LoadingSpinner.tsx"
-Cohesion: 0.12
-Nodes (13): authApi, billingApi, bundlesApi, LoadingSpinner(), LoadingSpinnerProps, BuyCreditsPage(), formatPrice(), InvoiceModal() (+5 more)
+Cohesion: 0.13
+Nodes (19): authApi, billingApi, bundlesApi, ConfirmModal(), ConfirmModalProps, LoadingSpinner(), LoadingSpinnerProps, BuyCreditsPage() (+11 more)
 
 ### Community 26 - "WebhooksHandler"
-Cohesion: 0.23
-Nodes (9): Logger, MongoDB, Request, ResponseWriter, NewWebhooksHandler(), validateWebhookRequest(), validateWebhookURL(), webhookRequest (+1 more)
+Cohesion: 0.22
+Nodes (10): generateRandomToken(), Logger, MongoDB, Request, ResponseWriter, NewWebhooksHandler(), validateWebhookRequest(), validateWebhookURL() (+2 more)
 
 ### Community 27 - "Write"
 Cohesion: 0.15
@@ -324,24 +337,24 @@ Cohesion: 0.15
 Nodes (16): Handler, Mutex, ResponseWriter, NewMetricsCollector(), percentile(), T, TestMetricsCollectorMiddleware(), TestMetricsCollectorMiddlewareDefaultStatus() (+8 more)
 
 ### Community 30 - "ui/index.ts"
-Cohesion: 0.07
-Nodes (19): AlertProps, AlertVariant, variantClasses, Badge(), BadgeProps, BadgeVariant, variantClasses, Button() (+11 more)
+Cohesion: 0.14
+Nodes (9): Card(), CardProps, paddingClasses, Input, InputProps, Select, SelectProps, Textarea (+1 more)
 
 ### Community 31 - "compilerOptions"
 Cohesion: 0.07
 Nodes (26): compilerOptions, allowImportingTsExtensions, erasableSyntaxOnly, jsx, lib, module, moduleDetection, moduleResolution (+18 more)
 
-### Community 32 - "Logger"
-Cohesion: 0.14
-Nodes (15): MongoDB, Request, ResponseWriter, Service, Time, NewPMHandler(), parsePMTimeRange(), Context (+7 more)
+### Community 32 - "PMHandler"
+Cohesion: 0.30
+Nodes (8): MongoDB, Request, ResponseWriter, Service, Time, NewPMHandler(), parsePMTimeRange(), PMHandler
 
-### Community 33 - "ResendService"
-Cohesion: 0.15
-Nodes (10): Request, ResponseWriter, Service, Time, NewHealthHandler(), parseTimeRange(), NewResendService(), emailRequest (+2 more)
+### Community 33 - "HealthHandler"
+Cohesion: 0.20
+Nodes (9): Request, ResponseWriter, Service, Time, NewHealthHandler(), parseTimeRange(), isValidEmail(), ErrorResponse (+1 more)
 
-### Community 34 - "PlansHandler"
-Cohesion: 0.19
-Nodes (14): Context, Logger, MongoDB, Plan, Request, ResponseWriter, Service, Store (+6 more)
+### Community 34 - "GetUserFromContext"
+Cohesion: 0.18
+Nodes (16): Context, Logger, MongoDB, Plan, Request, ResponseWriter, Service, Store (+8 more)
 
 ### Community 35 - "cmd_mcp.go"
 Cohesion: 0.38
@@ -383,10 +396,6 @@ Nodes (22): cmdChangePassword(), cmdConfig(), cmdConfigGet(), cmdConfigList(), c
 Cohesion: 0.23
 Nodes (20): AllSchemas(), announcementsSchema(), apiKeysSchema(), configVarsSchema(), creditBundlesSchema(), customPagesSchema(), eventDefinitionsSchema(), financialTransactionsSchema() (+12 more)
 
-### Community 45 - "handlers/auth.go"
-Cohesion: 0.14
-Nodes (13): User, AcceptInvitationRequest, AuthResponse, ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, MFARequiredResponse, RefreshRequest (+5 more)
-
 ### Community 46 - "BillingHandler"
 Cohesion: 0.21
 Nodes (10): Context, Emitter, Logger, MongoDB, Request, ResponseWriter, Service, Store (+2 more)
@@ -412,8 +421,8 @@ Cohesion: 0.24
 Nodes (7): Context, Duration, MongoDB, RWMutex, New(), Store, ConfigVar
 
 ### Community 52 - "main"
-Cohesion: 0.34
-Nodes (13): main(), Context, NewDataDogChecker(), NewGitHubOAuthChecker(), NewGoogleOAuthChecker(), NewMicrosoftOAuthChecker(), NewMongoChecker(), NewResendChecker() (+5 more)
+Cohesion: 0.08
+Nodes (28): main(), Emitter, Logger, MongoDB, NewAPIKeysHandler(), NewResendService(), Context, Service (+20 more)
 
 ### Community 53 - "APIPage.tsx"
 Cohesion: 0.17
@@ -431,9 +440,9 @@ Nodes (14): capitalizeStr(), cmdRestart(), cmdStart(), cmdStop(), ensurePIDDir()
 Cohesion: 0.31
 Nodes (6): Time, NewNoopEmitter(), Emitter, Event, EventType, NoopEmitter
 
-### Community 57 - "MicrosoftOAuthService"
-Cohesion: 0.21
-Nodes (7): MicrosoftOAuthService, MicrosoftUserInfo, Context, Token, NewMicrosoftOAuthService(), TestMicrosoftGetAuthURL(), TestNewMicrosoftOAuthService()
+### Community 57 - "createAdminEnv"
+Cohesion: 0.17
+Nodes (28): T, TestIntegration_APIKeys_NonRootTenantForbidden(), TestIntegration_CreateAPIKey_InvalidAuthority(), TestIntegration_CreateAPIKey_MissingName(), TestIntegration_CreateAPIKey_Success(), TestIntegration_CreateAPIKey_UserAuthority(), TestIntegration_DeleteAPIKey_NotFound(), TestIntegration_DeleteAPIKey_Success() (+20 more)
 
 ### Community 58 - "BootstrapHandler"
 Cohesion: 0.23
@@ -464,8 +473,8 @@ Cohesion: 0.19
 Nodes (12): Request, ResponseWriter, ResponseWriter, respondWithError(), Emitter, Logger, MongoDB, Request (+4 more)
 
 ### Community 65 - "init"
-Cohesion: 0.23
-Nodes (11): ObjectID, Time, ValidAPIKeyAuthority(), ObjectID, Time, ValidConfigVarType(), init(), APIKey (+3 more)
+Cohesion: 0.43
+Nodes (6): ObjectID, Time, ValidAPIKeyAuthority(), init(), APIKey, APIKeyAuthority
 
 ### Community 66 - "models_test.go"
 Cohesion: 0.28
@@ -479,13 +488,13 @@ Nodes (15): cmdUsers(), cmdUsersGet(), cmdUsersList(), cmdUsersRevokeSessions(),
 Cohesion: 0.29
 Nodes (4): Context, MongoDB, New(), Service
 
-### Community 69 - "PlanPage.tsx"
-Cohesion: 0.26
-Nodes (11): telemetryApi, getSessionId(), useTelemetry(), annualPrice(), annualTotal(), currencySymbols, formatPrice(), getCurrencySymbol() (+3 more)
+### Community 69 - "PlansPage.tsx"
+Cohesion: 0.11
+Nodes (25): plansApi, telemetryApi, getSessionId(), useTelemetry(), BundleFormModal(), BundleFormModalProps, formatPrice(), PlanFormModal() (+17 more)
 
-### Community 70 - "ConfigPage.tsx"
-Cohesion: 0.21
-Nodes (9): ConfigPage(), CreateConfigModal(), EditConfigModal(), parseEnumOptions(), serializeEnumOptions(), typeLabels, ConfigVar, ConfigVarType (+1 more)
+### Community 70 - "ReadResponseBody"
+Cohesion: 0.22
+Nodes (22): T, TestIntegration_AdminCancelRootInvitation(), TestIntegration_AdminChangeRootMemberRole(), TestIntegration_AdminDashboard(), TestIntegration_AdminGetTenant(), TestIntegration_AdminGetTenantNotFound(), TestIntegration_AdminGetUser(), TestIntegration_AdminGetUserNotFound() (+14 more)
 
 ### Community 71 - "keywords"
 Cohesion: 0.17
@@ -539,9 +548,13 @@ Nodes (8): description, name, packages, repository, source, url, $schema, versio
 Cohesion: 0.36
 Nodes (5): MongoDB, Request, ResponseWriter, NewAnnouncementsHandler(), AnnouncementsHandler
 
-### Community 86 - "TenantContext.tsx"
+### Community 85 - "setupTestServer"
+Cohesion: 0.23
+Nodes (22): T, TestIntegration_BootstrapStatus(), TestIntegration_BootstrapStatusAfterInit(), TestIntegration_ChangePassword(), TestIntegration_ChangePasswordWrongCurrent(), TestIntegration_GetMe(), TestIntegration_GetMeNoToken(), TestIntegration_LoginNonexistentUser() (+14 more)
+
+### Community 86 - "useTenant"
 Cohesion: 0.13
-Nodes (19): plansApi, setTenantHeader(), TenantContext, TenantContextType, TenantProvider(), PlanFormModalProps, formatPrice(), TenantProfilePage() (+11 more)
+Nodes (20): messagesApi, setTenantHeader(), AdminLayout(), AdminRoute(), TenantContext, TenantContextType, TenantProvider(), useTenant() (+12 more)
 
 ### Community 87 - "scripts"
 Cohesion: 0.25
@@ -575,9 +588,9 @@ Nodes (7): Available Tools (26), Build the CLI binary, Environment Variables, MC
 Cohesion: 0.50
 Nodes (4): checkConfigIntegration(), cmdDoctor(), Context, MongoDB
 
-### Community 95 - "NewGoogleOAuthService"
-Cohesion: 0.25
-Nodes (6): GoogleUserInfo, Context, Token, NewGoogleOAuthService(), TestGoogleGetAuthURL(), TestNewGoogleOAuthService()
+### Community 95 - "plans_test.go"
+Cohesion: 0.21
+Nodes (21): T, TestIntegration_AdminCannotDeletePlan(), TestIntegration_ArchivePlan_Success(), TestIntegration_ArchiveSystemPlan_Forbidden(), TestIntegration_AssignPlan_Success(), TestIntegration_CreatePlan_DuplicateName(), TestIntegration_CreatePlan_MissingName(), TestIntegration_CreatePlan_Success() (+13 more)
 
 ### Community 96 - "counter_test.go"
 Cohesion: 0.53
@@ -587,9 +600,9 @@ Nodes (5): T, TestConcurrentIncrements(), TestResendEmailsIncrement(), TestStrip
 Cohesion: 0.36
 Nodes (8): ObjectID, Time, BillingStatus, DailyMetric, FinancialTransaction, InvoiceCounter, StripeMapping, TransactionType
 
-### Community 98 - "CheckAndMigrate"
-Cohesion: 0.60
-Nodes (5): CheckAndMigrate(), Context, MongoDB, runMigrations(), sendUpgradeMessage()
+### Community 98 - "testutil.go"
+Cohesion: 0.17
+Nodes (18): APIKeyAuthority, M, TestMain(), ConnectTestDB(), CreateTestAPIKey(), CreateTestInvitation(), findAndSetConfigDir(), APIKey (+10 more)
 
 ### Community 99 - "LastSaaS Development Rules"
 Cohesion: 0.33
@@ -619,9 +632,9 @@ Nodes (4): ObjectID, Time, SSOAttributeMap, SSOConnection
 Cohesion: 0.40
 Nodes (4): name, private, type, version
 
-### Community 106 - "IntegrationsPanel.tsx"
-Cohesion: 0.28
-Nodes (6): CALLS_24H_LABEL, getSetupHelp(), ICONS, IntegrationsPanel(), LABELS, timeAgo()
+### Community 106 - "InsertTestLogs"
+Cohesion: 0.32
+Nodes (12): T, TestIntegration_LogsDateRange(), TestIntegration_LogsEmptyResults(), TestIntegration_LogsFilterByCategory(), TestIntegration_LogsFilterBySeverity(), TestIntegration_LogsListDefault(), TestIntegration_LogsMultiSeverityFilter(), TestIntegration_LogsPagination() (+4 more)
 
 ### Community 107 - "Plan"
 Cohesion: 0.39
@@ -644,8 +657,8 @@ Cohesion: 0.50
 Nodes (3): ObjectID, Time, EventDefinition
 
 ### Community 112 - "MemberRole"
-Cohesion: 0.24
-Nodes (10): ObjectID, Time, RoleHasPermission(), T, TestRoleHasPermission(), TestValidRole(), ValidRole(), MembershipInfo (+2 more)
+Cohesion: 0.27
+Nodes (9): ObjectID, Time, RoleHasPermission(), T, TestRoleHasPermission(), TestValidRole(), ValidRole(), MemberRole (+1 more)
 
 ### Community 113 - "Message"
 Cohesion: 0.50
@@ -679,9 +692,9 @@ Nodes (3): maintainers, $schema, jonradoff
 Cohesion: 0.50
 Nodes (4): compatibility, platforms, darwin, linux
 
-### Community 121 - "APIKeysHandler"
-Cohesion: 0.60
-Nodes (5): Emitter, Logger, MongoDB, NewAPIKeysHandler(), APIKeysHandler
+### Community 121 - "EventDefinitionModal.tsx"
+Cohesion: 0.28
+Nodes (7): Modal(), ModalProps, EventDefinitionModal(), FormData, Props, schema, EventDefinition
 
 ### Community 125 - "author"
 Cohesion: 0.67
@@ -723,25 +736,41 @@ Nodes (3): ObjectID, Time, TelemetryEvent
 Cohesion: 0.67
 Nodes (3): ObjectID, CheckoutLineItem, CheckoutRequest
 
+### Community 169 - "Button.tsx"
+Cohesion: 0.29
+Nodes (6): Button(), ButtonProps, ButtonSize, ButtonVariant, sizeClasses, variantClasses
+
+### Community 170 - "ValidConfigVarType"
+Cohesion: 0.47
+Nodes (5): ObjectID, Time, ValidConfigVarType(), ConfigVar, ConfigVarType
+
+### Community 171 - "Alert.tsx"
+Cohesion: 0.40
+Nodes (3): AlertProps, AlertVariant, variantClasses
+
+### Community 172 - "Badge.tsx"
+Cohesion: 0.40
+Nodes (4): Badge(), BadgeProps, BadgeVariant, variantClasses
+
 ## Knowledge Gaps
-- **350 isolated node(s):** `eventDefRequest`, `ErrorResponse`, `GitHubEmail`, `emailRequest`, `contextKey` (+345 more)
+- **350 isolated node(s):** `RegisterRequest`, `LoginRequest`, `RefreshRequest`, `MFARequiredResponse`, `VerifyEmailRequest` (+345 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **28 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **37 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `setupTestServer()` connect `setupTestServer` to `respondWithError`, `PlansHandler`, `WebhooksHandler`, `emitter.go`, `AuthHandler`, `Client`, `BillingHandler`, `LogHandler`, `middleware/tenant_test.go`, `setupIsolationEnv`, `GetUserFromContext`, `MustConnectTestDB`, `APIKeysHandler`, `BootstrapHandler`?**
-  _High betweenness centrality (0.135) - this node is a cross-community bridge._
-- **Why does `main()` connect `main` to `WebhookHandler`, `oauth_test.go`, `PromotionsHandler`, `config_test.go`, `GetUserFromContext`, `RateLimiter`, `MustConnectTestDB`, `WebhooksHandler`, `Write`, `respondWithJSON`, `ResendService`, `PlansHandler`, `EventDefinitionsHandler`, `connectDB`, `BillingHandler`, `LogHandler`, `MicrosoftOAuthService`, `ConfigHandler`, `BundlesHandler`, `respondWithError`, `.TrackAuthenticated`, `NewGoogleOAuthService`, `CheckAndMigrate`, `APIKeysHandler`?**
-  _High betweenness centrality (0.097) - this node is a cross-community bridge._
-- **Why does `Client` connect `Client` to `setupTestServer`, `ResendService`, `cmd_mcp.go`, `MongoDB`, `crypto_test.go`, `setupIsolationEnv`, `main`?**
-  _High betweenness centrality (0.059) - this node is a cross-community bridge._
+- **Why does `setupTestServer()` connect `setupTestServer` to `CreateTestUser`, `AuthHandler`, `Client`, `middleware/tenant_test.go`, `setupIsolationEnv`, `AdminHandler`, `MustConnectTestDB`, `WebhooksHandler`, `GetUserFromContext`, `BillingHandler`, `LogHandler`, `main`, `emitter.go`, `createAdminEnv`, `BootstrapHandler`, `respondWithError`, `ReadResponseBody`, `plans_test.go`, `testutil.go`, `InsertTestLogs`?**
+  _High betweenness centrality (0.158) - this node is a cross-community bridge._
+- **Why does `main()` connect `main` to `WebhookHandler`, `oauth_test.go`, `PromotionsHandler`, `config_test.go`, `AdminHandler`, `RateLimiter`, `MustConnectTestDB`, `WebhooksHandler`, `Write`, `respondWithJSON`, `HealthHandler`, `GetUserFromContext`, `EventDefinitionsHandler`, `connectDB`, `BillingHandler`, `LogHandler`, `ConfigHandler`, `BundlesHandler`, `respondWithError`, `.TrackAuthenticated`?**
+  _High betweenness centrality (0.102) - this node is a cross-community bridge._
+- **Why does `Client` connect `Client` to `cmd_mcp.go`, `MongoDB`, `crypto_test.go`, `setupIsolationEnv`, `main`, `setupTestServer`?**
+  _High betweenness centrality (0.073) - this node is a cross-community bridge._
 - **Are the 148 inferred relationships involving `setupTestServer()` (e.g. with `TestIntegration_AdminCancelRootInvitation()` and `TestIntegration_AdminChangeRootMemberRole()`) actually correct?**
   _`setupTestServer()` has 148 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 143 inferred relationships involving `respondWithError()` (e.g. with `.CancelRootInvitation()` and `.ChangeRootMemberRole()`) actually correct?**
-  _`respondWithError()` has 143 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 141 inferred relationships involving `respondWithJSON()` (e.g. with `.CancelRootInvitation()` and `.ChangeRootMemberRole()`) actually correct?**
-  _`respondWithJSON()` has 141 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 115 inferred relationships involving `respondWithJSON()` (e.g. with `.CancelRootInvitation()` and `.ChangeRootMemberRole()`) actually correct?**
+  _`respondWithJSON()` has 115 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 112 inferred relationships involving `respondWithError()` (e.g. with `.CancelRootInvitation()` and `.ChangeRootMemberRole()`) actually correct?**
+  _`respondWithError()` has 112 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 77 inferred relationships involving `CreateTestUser()` (e.g. with `TestIntegration_AdminChangeRootMemberRole()` and `TestIntegration_AdminGetUser()`) actually correct?**
   _`CreateTestUser()` has 77 INFERRED edges - model-reasoned connections that need verification._

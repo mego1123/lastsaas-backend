@@ -286,9 +286,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
         }
 
         memberships, err := h.getUserMemberships(r.Context(), user.ID)
-	if err != nil {
-		slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
-	}
+        if err != nil {
+                slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
+        }
 
         h.events.Emit(events.Event{
                 Type:      events.EventUserRegistered,
@@ -419,9 +419,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
         }
 
         memberships, err := h.getUserMemberships(r.Context(), user.ID)
-	if err != nil {
-		slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
-	}
+        if err != nil {
+                slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
+        }
 
         h.events.Emit(events.Event{
                 Type:      events.EventUserLoggedIn,
@@ -558,9 +558,9 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
         )
 
         memberships, err := h.getUserMemberships(r.Context(), user.ID)
-	if err != nil {
-		slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
-	}
+        if err != nil {
+                slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
+        }
 
         respondWithJSON(w, http.StatusOK, AuthResponse{
                 AccessToken:  accessToken,
@@ -578,9 +578,9 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
         }
 
         memberships, err := h.getUserMemberships(r.Context(), user.ID)
-	if err != nil {
-		slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
-	}
+        if err != nil {
+                slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
+        }
 
         respondWithJSON(w, http.StatusOK, map[string]interface{}{
                 "user":        user,
@@ -895,8 +895,8 @@ func (h *AuthHandler) MFASetup(w http.ResponseWriter, r *http.Request) {
         }
 
         respondWithJSON(w, http.StatusOK, map[string]interface{}{
-                "secret": key.Secret(),
-                "qrUrl":  key.URL(),
+                "secret":    key.Secret(),
+                "qrCodeUrl": key.URL(),
         })
 }
 
@@ -1086,9 +1086,9 @@ func (h *AuthHandler) MFAChallenge(w http.ResponseWriter, r *http.Request) {
         }
 
         memberships, err := h.getUserMemberships(r.Context(), user.ID)
-	if err != nil {
-		slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
-	}
+        if err != nil {
+                slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
+        }
 
         now := time.Now()
         h.events.Emit(events.Event{
@@ -1286,9 +1286,9 @@ func (h *AuthHandler) MagicLinkVerify(w http.ResponseWriter, r *http.Request) {
         }
 
         memberships, err := h.getUserMemberships(r.Context(), user.ID)
-	if err != nil {
-		slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
-	}
+        if err != nil {
+                slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
+        }
 
         respondWithJSON(w, http.StatusOK, AuthResponse{
                 AccessToken:  accessToken,
@@ -1965,9 +1965,9 @@ func (h *AuthHandler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
         }
 
         memberships, err := h.getUserMemberships(r.Context(), user.ID)
-	if err != nil {
-		slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
-	}
+        if err != nil {
+                slog.Error("Failed to get user memberships", "userId", user.ID.Hex(), "error", err)
+        }
         respondWithJSON(w, http.StatusOK, map[string]interface{}{
                 "message":     "Invitation accepted",
                 "memberships": memberships,
@@ -2056,10 +2056,35 @@ func (h *AuthHandler) getUserMemberships(ctx context.Context, userID primitive.O
                 return nil, fmt.Errorf("failed to decode memberships: %w", err)
         }
 
+        if len(memberships) == 0 {
+                return []MembershipInfo{}, nil
+        }
+
+        // Batch-fetch all tenants in a single query (fixes N+1)
+        tenantIDs := make([]primitive.ObjectID, 0, len(memberships))
+        for _, m := range memberships {
+                tenantIDs = append(tenantIDs, m.TenantID)
+        }
+        tenantCursor, err := h.db.Tenants().Find(ctx, bson.M{"_id": bson.M{"$in": tenantIDs}})
+        if err != nil {
+                return nil, fmt.Errorf("failed to batch-query tenants: %w", err)
+        }
+        defer tenantCursor.Close(ctx)
+
+        var tenants []models.Tenant
+        if err := tenantCursor.All(ctx, &tenants); err != nil {
+                return nil, fmt.Errorf("failed to decode tenants: %w", err)
+        }
+
+        tenantMap := make(map[primitive.ObjectID]models.Tenant, len(tenants))
+        for _, t := range tenants {
+                tenantMap[t.ID] = t
+        }
+
         var result []MembershipInfo
         for _, m := range memberships {
-                var tenant models.Tenant
-                if err := h.db.Tenants().FindOne(ctx, bson.M{"_id": m.TenantID}).Decode(&tenant); err != nil {
+                tenant, ok := tenantMap[m.TenantID]
+                if !ok {
                         continue
                 }
                 result = append(result, MembershipInfo{
