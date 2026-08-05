@@ -380,6 +380,9 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListTransactions returns paginated transactions for the current tenant.
+// graphify:no-index-check — tenant-scoped query whose filter is
+// built on a separate line and passed by variable; the tenantId
+// index covers it but the static analyzer can't see the variable's fields.
 func (h *BillingHandler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenant, ok := middleware.GetTenantFromContext(ctx)

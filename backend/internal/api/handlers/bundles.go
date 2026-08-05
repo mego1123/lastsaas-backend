@@ -231,6 +231,7 @@ func (h *BundlesHandler) DeleteBundle(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListBundlesPublic returns active credit bundles for authenticated users.
+// graphify:no-index-check — public endpoint, ~10-doc static catalog
 func (h *BundlesHandler) ListBundlesPublic(w http.ResponseWriter, r *http.Request) {
 	opts := options.Find().SetSort(bson.D{{Key: "sortOrder", Value: 1}, {Key: "createdAt", Value: 1}})
 	cursor, err := h.db.CreditBundles().Find(r.Context(), bson.M{"isActive": true}, opts)

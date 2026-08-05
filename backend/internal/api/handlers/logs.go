@@ -87,6 +87,8 @@ func (h *LogHandler) buildFilter(q map[string][]string) bson.M {
 	return filter
 }
 
+// graphify:no-index-check — admin log query whose filter is built
+// dynamically via h.buildFilter(q).
 func (h *LogHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 

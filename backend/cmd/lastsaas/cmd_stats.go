@@ -28,6 +28,8 @@ func cmdStats() {
         if err != nil {
                 fmt.Fprintf(os.Stderr, "warning: failed to count tenants: %v\n", err)
         }
+        // graphify:no-index-check — CLI stats command: bounded admin query
+        // (counts active users for the `lastsaas stats` CLI report).
         activeUsers, err := database.Users().CountDocuments(ctx, bson.M{"isActive": true})
         if err != nil {
                 fmt.Fprintf(os.Stderr, "warning: failed to count active users: %v\n", err)

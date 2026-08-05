@@ -304,6 +304,9 @@ type EventTypeSummary struct {
 // --- Query methods ---
 
 // FunnelMetrics computes the conversion funnel for a date range.
+// graphify:no-index-check — admin analytics query whose filter is
+// built dynamically via mergeBson(dateFilter, bson.M{...}) and
+// the regex parser can't see the merged fields.
 func (s *Service) FunnelMetrics(ctx context.Context, start, end time.Time) (*FunnelData, error) {
         dateFilter := bson.M{"createdAt": bson.M{"$gte": start, "$lte": end}}
 
@@ -692,6 +695,8 @@ func (s *Service) computeKPIs(ctx context.Context) (*KPIData, error) {
 }
 
 // CustomEventSummary returns trend data for a specific event name.
+// graphify:no-index-check — admin telemetry query whose filter is
+// built dynamically and the regex parser can't trace the field names.
 func (s *Service) CustomEventSummary(ctx context.Context, start, end time.Time, eventName string) (*CustomEventData, error) {
         filter := bson.M{
                 "createdAt": bson.M{"$gte": start, "$lte": end},

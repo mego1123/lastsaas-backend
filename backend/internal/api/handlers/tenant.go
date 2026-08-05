@@ -555,6 +555,9 @@ func (h *TenantHandler) TransferOwnership(w http.ResponseWriter, r *http.Request
 
 // --- Tenant Activity Log ---
 
+// graphify:no-index-check — admin activity-log query whose filter
+// is built dynamically from query params via filter["..."] patterns
+// the regex parser can't fully trace.
 func (h *TenantHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 	tenant, ok := middleware.GetTenantFromContext(r.Context())
 	if !ok {
