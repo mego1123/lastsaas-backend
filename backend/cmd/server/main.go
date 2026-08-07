@@ -397,6 +397,7 @@ func main() {
         }).Methods("GET")
 
         api := router.PathPrefix("/api").Subrouter()
+        api.Use(middleware.GzipMiddleware)
         api.Use(middleware.RequestID)
         api.Use(middleware.APIVersion)
         // Note: BodySizeLimit is applied at the outermost handler layer — not here to avoid double-wrapping
