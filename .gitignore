@@ -1,54 +1,44 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Config files with secrets
+backend/config/dev.yaml
+backend/config/prod.yaml
 
-# dependencies
-node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# Go binaries
+backend/lastsaas
+backend/lastsaas-cli
+backend/lastsaas-server
+backend/server
+backend/vendor/
+/lastsaas
+/bin/
 
-# testing
-/coverage
+# Process management
+.pids/
 
-# next.js
-/.next/
-/out/
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
 
-# production
-/build
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
-# misc
+# OS
 .DS_Store
-*.pem
+Thumbs.db
 
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
+# Environment
+.env
+.env.*
+!.env.example
 
-# env files (can opt-in for committing if needed)
-.env*
+# Build artifacts
+bundle/
+dist/
+*.mcpb
 
-# vercel
-.vercel
-
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-local-*
-.claude
-.z-ai-config
-*.log
-dev.log
-dev.out.log
-test
-prompt
-
-server.log
-# Skills directory
-/skills/
+# MCP registry tokens
+.mcpregistry_*
